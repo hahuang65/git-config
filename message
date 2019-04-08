@@ -1,0 +1,31 @@
+# <TYPE>: <SUBJECT>
+
+# <BODY>
+# What is this change?
+
+# Why is the change being made?
+
+# <ANNOTATIONS>
+# Link(s) to issue tracker ticket(s)
+
+# Link(s) to helpful articles or other resources
+
+
+# ----------------------------- REFERENCE ------------------------------
+# Type can be
+#    FEATURE  (new feature)
+#    FIX      (bug fix)
+#    REFACTOR (refactoring production code)
+#    STYLE    (formatting, missing semi colons, etc; no code change)
+#    DOCS     (changes to documentation)
+#    TEST     (adding or refactoring tests; no production code change)
+#    CHORE    (updating grunt tasks etc; no production code change)
+#
+# Remember to
+#    Capitalize the subject line
+#    Limit the lines to be 72 characters (the REFERENCE line ends at 72)
+#    Use the imperative mood in the subject line
+#    Do not end the subject line with a period
+#    Separate subject from body with a blank line
+#    Use the body to explain what and why vs. how
+#    Can use multiple lines with "-" for bullet points in body
