@@ -31,21 +31,23 @@
   branches = branch --list
   branch-name = rev-parse --abbrev-ref HEAD
   change = "!f() { git checkout hh/"${1}" 2> /dev/null || git checkout "${1}"; }; f"
-  cleanup = "!f() { CURRENT_BRANCH=$(git branch-name); git checkout master > /dev/null 2>&1 && git branch -vv | awk '/: gone]/{print $1}' | xargs --no-run-if-empty --max-args=1 git branch --delete --force; git checkout "$CURRENT_BRANCH" > /dev/null 2>&1; }; f"
+  cleanup = "!f() { CURRENT_BRANCH=$(git branch-name); git checkout $(git trunk-branch) > /dev/null 2>&1 && git branch -vv | awk '/: gone]/{print $1}' | xargs --no-run-if-empty --max-args=1 git branch --delete --force; git checkout "$CURRENT_BRANCH" > /dev/null 2>&1; }; f"
   conflicts = diff --name-only --diff-filter=U
   issue = !gh issue
-  new = "!f() { git checkout --no-track -b hh/"${1}" origin/master; }; f"
+  new = "!f() { git checkout --no-track -b hh/"${1}" $(git trunk-branch); }; f"
   patch = !git --no-pager diff --no-color
   pr = !gh pr
   prep = !git add --intent-to-add . && git add --patch && git diff --cached --stat
   publish = !git push origin $(git branch-name)
-  remaster = !git fetch origin master && git rebase --autostash origin/master
+  retrunk = !git fetch origin $(git trunk-branch) && git rebase --autostash $(git trunk-branch)
   rename = "!f() { git unpublish && git branch --move hh/${1} && git publish; }; f"
   repo = !gh repo
   review = "!f() { git log --no-merges --author=h.huang65@gmail.com --author=hao@hwrd.me --since="${1}"; }; f"
   shove = push --force-with-lease
   state = status --short --branch --untracked-files
   sync = "!f() { git fetch --all --prune && git pull --rebase --autostash && git submodule update --init --recursive && git cleanup; }; f"
+  trunk = "!f() { git checkout $(git trunk-branch); }; f"
+  trunk-branch = "!f() { git branch --remote | grep 'origin/HEAD' | awk -F' -> ' '{print $2}' | sed 's/origin\\///'; }; f"
   unpublish = !git push origin :$(git branch-name)
   untag = "!f() { git tag --delete "${1}" && git push origin :refs/tags/"${1}"; }; f"
   unwip = "!f() { git log --format=%s -n 1 | grep WIP > /dev/null && git reset HEAD^; echo "Now on `git log -n 1 --format='%Cred%h%Creset - %s %Cgreen(%cr) %C(bold blue)<%an>%Creset'`"; }; f"
