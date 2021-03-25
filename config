@@ -38,7 +38,7 @@
   patch = !git --no-pager diff --no-color
   pr = !gh pr
   prep = !git add --intent-to-add . && git add --patch && git diff --cached --stat
-  publish = !git push origin $(git branch-name)
+  publish = !git push --set-upstream origin $(git branch-name)
   retrunk = !git fetch origin $(git trunk-branch) && git rebase --autostash $(git trunk-branch)
   rename = "!f() { git unpublish && git branch --move hh/${1} && git publish; }; f"
   repo = !gh repo
