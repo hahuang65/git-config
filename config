@@ -39,7 +39,7 @@
   pr = !gh pr
   prep = !git add --intent-to-add . && git add --patch && git diff --cached --stat
   publish = !git push --set-upstream origin $(git branch-name)
-  retrunk = !git fetch origin $(git trunk-branch) && git rebase --autostash $(git trunk-branch)
+  retrunk = !git fetch origin $(git trunk-branch) && git rebase --autostash origin/$(git trunk-branch)
   rename = "!f() { git unpublish && git branch --move hh/${1} && git publish; }; f"
   repo = !gh repo
   review = "!f() { git log --no-merges --author=h.huang65@gmail.com --author=hao@hwrd.me --since="${1}"; }; f"
