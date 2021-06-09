@@ -5,20 +5,35 @@
 [core]
   excludesfile = ~/.gitignore_global
   editor = nvim
-  pager = diff-so-fancy | less --tabs=4 -RFX
+  pager = delta
 [color]
   ui = auto
 [commit]
   template = ~/.gitmessage
   verbose = true
+[delta]
+  plus-style = "syntax #012800"
+  minus-style = "syntax #340001"
+  zero-style = "dim syntax"
+  navigate = true
+  side-by-side = true
+  syntax-theme = Dracula
 [diff]
-  submodule=log
+  submodule = log
+  colorMoved = default
 [fetch]
   prune = true
 [filter "lfs"]
   clean = git-lfs clean %f
   smudge = git-lfs smudge %f
   required = true
+[interactive]
+  diffFilter = delta --color-only
+[pager]
+  diff = delta
+  log = delta
+  reflog = delta
+  show = delta
 [pull]
   rebase = true
 [push]
