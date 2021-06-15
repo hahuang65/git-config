@@ -12,9 +12,8 @@
   template = ~/.gitmessage
   verbose = true
 [delta]
-  plus-style = "syntax #012800"
-  minus-style = "syntax #340001"
-  zero-style = "dim syntax"
+  plus-style = "syntax auto"
+  minus-style = "syntax auto"
   navigate = true
   side-by-side = true
   syntax-theme = Dracula
