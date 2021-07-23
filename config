@@ -61,6 +61,7 @@
   review = "!f() { git log --no-merges --author=h.huang65@gmail.com --author=hao@hwrd.me --since="${1}"; }; f"
   shove = push --force-with-lease
   state = status --short --branch --untracked-files
+  summit-rc = "!f() { git checkout production; git sync; git checkout -b "${1}-rc"; git merge --no-edit --no-ff origin/master; git publish; TITLE=$(echo "${1}" | sed -e 's/-/ /g' | awk '{for(i=1;i<=NF;i++){ $i=toupper(substr($i,1,1)) substr($i,2) }}1'); git pr create --web --base=production --title="\"${TITLE} RC\""; }; f"
   sync = "!f() { git fetch --all --prune && git pull --rebase --autostash && git submodule update --init --recursive && git cleanup; }; f"
   trunk = "!f() { git checkout $(git trunk-branch); }; f"
   trunk-branch = "!f() { git branch --remote | grep 'origin/HEAD' | awk -F' -> ' '{print $2}' | sed 's/origin\\///'; }; f"
