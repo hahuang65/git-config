@@ -11,12 +11,30 @@
 [commit]
   template = ~/.gitmessage
   verbose = true
+[delta "colorscheme"]
+  commit-style                  = bold yellow 
+  file-style                    = brightyellow
+  hunk-header-style             = bold blue
+  minus-style                   = bold red
+  minus-non-emph-style          = red
+  minus-emph-style              = bold black red
+  minus-empty-line-marker-style = normal red
+  zero-style                    = normal
+  plus-style                    = bold green
+  plus-non-emph-style           = green
+  plus-emph-style               = bold black green
+  plus-empty-line-marker-style  = normal green
+  whitespace-error-style        = reverse purple
+  true-color                    = true
+  line-numbers-zero-style       = dim normal
+  line-numbers-minus-style      = red
+  line-numbers-plus-style       = green
+  line-numbers-left-style       = blue
+  line-numbers-right-style      = blue
 [delta]
-  plus-style = "syntax auto"
-  minus-style = "syntax auto"
+  features = colorscheme
   navigate = true
   side-by-side = true
-  syntax-theme = Dracula
 [diff]
   submodule = log
   colorMoved = default
