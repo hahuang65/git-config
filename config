@@ -63,11 +63,11 @@
   branches = branch --list
   branch-name = rev-parse --abbrev-ref HEAD
   branch-name-or-commit = "!f() { git symbolic-ref --short -q HEAD || git rev-parse --short HEAD; }; f"
-  change = "!f() { git checkout hh/"${1}" 2> /dev/null || git checkout "${1}"; }; f"
-  cleanup = "!f() { CURRENT_BRANCH=$(git branch-name); git checkout $(git trunk-branch) > /dev/null 2>&1 && git branch -vv | awk '/: gone]/{print $1}' | xargs --no-run-if-empty --max-args=1 git branch --delete --force; git checkout "$CURRENT_BRANCH" > /dev/null 2>&1; }; f"
+  change = "!f() { git switch hh/"${1}" 2> /dev/null || git switch "${1}"; }; f"
+  cleanup = "!f() { CURRENT_BRANCH=$(git branch-name); git switch $(git trunk-branch) > /dev/null 2>&1 && git branch -vv | awk '/: gone]/{print $1}' | xargs --no-run-if-empty --max-args=1 git branch --delete --force; git switch "$CURRENT_BRANCH" > /dev/null 2>&1; }; f"
   conflicts = diff --name-only --diff-filter=U
   issue = !gh issue
-  new = "!f() { git checkout --no-track -b hh/"${1}" $(git trunk-branch); }; f"
+  new = "!f() { git switch --create --no-track -b hh/"${1}" $(git trunk-branch); }; f"
   patch = !git --no-pager diff --no-color
   pr = !gh pr
   prep = !git add --intent-to-add . && git add --patch && git diff --cached --stat
@@ -79,9 +79,9 @@
   review = "!f() { git log --no-merges --author=h.huang65@gmail.com --author=hao@hwrd.me --since="${1}"; }; f"
   shove = push --force-with-lease
   state = status --short --branch --untracked-files
-  summit-rc = "!f() { git checkout production; git sync; git checkout -b "${1}-rc"; git merge --no-edit --no-ff origin/master; git publish; TITLE=$(echo "${1}" | sed -e 's/-/ /g' | awk '{for(i=1;i<=NF;i++){ $i=toupper(substr($i,1,1)) substr($i,2) }}1'); git pr create --web --base=production --title="\"${TITLE} RC\""; }; f"
+  summit-rc = "!f() { git switch production; git sync; git switch --create "${1}-rc"; git merge --no-edit --no-ff origin/master; git publish; TITLE=$(echo "${1}" | sed -e 's/-/ /g' | awk '{for(i=1;i<=NF;i++){ $i=toupper(substr($i,1,1)) substr($i,2) }}1'); git pr create --web --base=production --title="\"${TITLE} RC\""; }; f"
   sync = "!f() { git fetch --all --prune && git pull --rebase --autostash && git submodule update --init --recursive && git cleanup; }; f"
-  trunk = "!f() { git checkout $(git trunk-branch); }; f"
+  trunk = "!f() { git switch $(git trunk-branch); }; f"
   trunk-branch = "!f() { git branch --remote | grep 'origin/HEAD' | awk -F' -> ' '{print $2}' | sed 's/origin\\///'; }; f"
   unpublish = !git push origin :$(git branch-name)
   untag = "!f() { git tag --delete "${1}" && git push origin :refs/tags/"${1}"; }; f"
