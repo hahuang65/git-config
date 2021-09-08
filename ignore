@@ -5,6 +5,8 @@ Thumbs.db
 
 # Ctags #
 tags
+tags.lock
+tags.temp
 
 # Rails #
 .bundle
