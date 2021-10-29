@@ -25,7 +25,7 @@
   plus-emph-style               = bold black green
   plus-empty-line-marker-style  = normal green
   whitespace-error-style        = reverse purple
-  true-color                    = true
+  true-color                    = always
   line-numbers-zero-style       = dim normal
   line-numbers-minus-style      = red
   line-numbers-plus-style       = green
