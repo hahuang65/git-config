@@ -21,15 +21,3 @@ coverage.data
 spec/tmp/*
 **.orig
 .powrc
-
-# XCode #
-dsa_priv.pem
-*.mode1
-*.mode1v3
-*.mode2v3
-VersionX-revision.h
-build/
-*.[oa]
-.hg
-*~.nib
-*.swp
