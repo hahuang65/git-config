@@ -21,3 +21,6 @@ coverage.data
 spec/tmp/*
 **.orig
 .powrc
+
+# Python #
+*.pyc
