@@ -66,7 +66,6 @@
   cleanup = "!f() { CURRENT_BRANCH=$(git branch-name); git switch $(git trunk-branch) > /dev/null 2>&1 && git branch -vv | awk '/: gone]/{print $1}' | xargs --no-run-if-empty --max-args=1 git branch --delete --force; git switch "$CURRENT_BRANCH" > /dev/null 2>&1; }; f"
   conflicts = diff --name-only --diff-filter=U
   issue = !gh issue
-  license = "!f() { ~/.dotfiles/git/scripts/git-license $@; }; f"
   new = "!f() { git switch --no-track --create hh/"${1}" $(git trunk-branch); }; f"
   patch = !git --no-pager diff --no-color
   pr = !gh pr
