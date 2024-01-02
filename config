@@ -12,9 +12,13 @@
   template = ~/.gitmessage
   verbose = true
 [delta "colorscheme"]
-  commit-style                  = bold yellow
-  file-style                    = brightyellow
-  hunk-header-style             = bold blue
+  commit-style                  = raw
+  commit-decorations-style      = blue ol
+  file-style                    = omit
+  hunk-header-style             = file line-number
+  hunk-header-decoration-style  = blue box
+  hunk-header-file-style        = red
+  hunk-header-line-number-style = red
   minus-style                   = bold red
   minus-non-emph-style          = red
   minus-emph-style              = bold black red
@@ -31,6 +35,9 @@
   line-numbers-plus-style       = green
   line-numbers-left-style       = blue
   line-numbers-right-style      = blue
+[delta "interactive"]
+  features = colorscheme
+  keep-plus-minus-markers = false
 [delta]
   features = colorscheme
   navigate = true
@@ -45,11 +52,14 @@
   smudge = git-lfs smudge %f
   required = true
 [interactive]
-  diffFilter = delta --color-only
+  diffFilter = delta --color-only --features=interactive
 [pager]
-  diff = delta
+  blame  = delta
+  diff   = delta
   reflog = delta
-  show = delta
+  show   = delta
+[merge]
+  conflictstyle = diff3
 [pull]
   rebase = true
 [push]
