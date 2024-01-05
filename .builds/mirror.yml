@@ -7,11 +7,19 @@ packages:
 secrets:
   - ac689c78-6425-43a3-b152-41116ad5aca4
   - 5f32a031-c12a-47dd-aa57-5545b970b0ba
+  - 94b29f51-75e7-4ee3-b276-5c727e5640e3
 tasks:
   - mirror: |
       set +x
       REPO=$(ls -1 | head -1)
       cd "$REPO"
+      VISIBILITY=$(hut git show "$REPO" | head -n1 | awk -F"[()]" '{print $2}')
+      if [[ "$VISIBILITY" == "public" ]]; then
+        GH_PRIVATE=false
+      else
+        GH_PRIVATE=true
+      fi
+
       echo "Setting up repository mirror for ${REPO}"
 
       GH_TOKEN=$(cat ~/.github_token)
@@ -24,7 +32,7 @@ tasks:
         SRHT_URL=$(git remote --verbose | grep "(push)" | grep "sr.ht" | awk -F " " '{print $2}')
         echo "Github repository not found. Creating one now to mirror ${SRHT_URL}"
 
-        GH_CREATE_RESP=$(curl --write-out '%{http_code}' --silent --header "Authorization: token ${GH_TOKEN}" --header "Accept: application/vnd.github.v3+json" --output /dev/null --request POST --data "{\"name\":\"${REPO}\", \"has_projects\":false, \"has_issues\":false, \"has_wiki\":false, \"description\":\"A mirror for ${SRHT_URL}\"}" https://api.github.com/user/repos)
+      GH_CREATE_RESP=$(curl --write-out '%{http_code}' --silent --header "Authorization: token ${GH_TOKEN}" --header "Accept: application/vnd.github.v3+json" --output /dev/null --request POST --data "{\"name\":\"${REPO}\", \"has_projects\":false, \"has_issues\":false, \"has_wiki\":false, \"private\":${GH_PRIVATE}, \"description\":\"A mirror for ${SRHT_URL}\"}" https://api.github.com/user/repos)
 
         if [[ "${GH_CREATE_RESP}" != "201" ]]; then
           echo "Failed to create Github repository ${REPO}, response code ${GH_CREATE_RESP}"
