@@ -2,12 +2,20 @@
   path = ~/.gitconfig.secret
 [includeIf "gitdir:**/a5/**"]
   path = ~/./a5.gitconfig
+[url "git@github.com:"]
+	pushInsteadOf = "https://github.com/"
+  insteadOf = "gh:"
+[url "git@git.sr.ht:"]
+	pushInsteadOf = "https://git.sr.ht/"
+  insteadOf = "srht:"
 [init]
 	defaultBranch = main
 [core]
   excludesfile = ~/.gitignore_global
   editor = nvim
   pager = delta
+[branch]
+  sort = -committerdate
 [color]
   ui = auto
 [commit]
@@ -45,29 +53,47 @@
   navigate = true
   side-by-side = true
 [diff]
-  submodule = log
+  algorithm = histogram
   colorMoved = default
+  colorMovedWS = allow-indentation-change
+  context = 10
+  submodule = log
 [fetch]
   prune = true
+  prunetags = true
 [filter "lfs"]
   clean = git-lfs clean %f
   smudge = git-lfs smudge %f
   required = true
+[help]
+  autocorrect = prompt
 [interactive]
   diffFilter = delta --color-only --features=interactive
+[log]
+  date = iso
 [pager]
   blame  = delta
   diff   = delta
   reflog = delta
   show   = delta
 [merge]
-  conflictstyle = diff3
+  conflictstyle = zdiff3
 [pull]
   rebase = true
 [push]
-  default = simple
+  autoSetupRemote = true
+  default = current
+  followtags = true
 [rebase]
+  autostash = true
   autosquash = true
+  missingCommitsCheck = error
+[rerere]
+  enabled = true
+[status]
+  submoduleSummary = true
+[tag]
+  sort = taggerdate
 [alias]
   aliases = "!f() { LINE=$(grep --line-number alias ~/.gitconfig | head --lines=1 |cut --fields=1 --delimiter=:); tail --lines=+"$LINE" ~/.gitconfig; }; f"
   amend = commit --amend
