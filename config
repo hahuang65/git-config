@@ -3,7 +3,7 @@
 [include]
   path = ~/.gitconfig.secret
 [includeIf "gitdir:**/a5/**"]
-  path = ~/./a5.gitconfig
+  path = ~/.a5.gitconfig
 [url "git@github.com:"]
 	pushInsteadOf = "https://github.com/"
   insteadOf = "gh:"
