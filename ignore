@@ -24,3 +24,6 @@ spec/tmp/*
 
 # Python #
 *.pyc
+
+# Snyk #
+.dccache
