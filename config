@@ -15,7 +15,9 @@
 [core]
   excludesfile = ~/.gitignore_global
   editor = nvim
+  fsmonitor = true
   pager = delta
+  untrackedCache = true
 [branch]
   sort = -committerdate
 [color]
@@ -59,8 +61,11 @@
   colorMoved = default
   colorMovedWS = allow-indentation-change
   context = 10
+  mnemonicPrefix = true
+  renames = true
   submodule = log
 [fetch]
+  all = true
   prune = true
   prunetags = true
 [filter "lfs"]
@@ -90,12 +95,14 @@
   autostash = true
   autosquash = true
   missingCommitsCheck = error
+  updateRefs = true
 [rerere]
+  autoupdate = true
   enabled = true
 [status]
   submoduleSummary = true
 [tag]
-  sort = taggerdate
+  sort = version:refname
 [alias]
   aliases = "!f() { LINE=$(grep --line-number alias ~/.gitconfig | head --lines=1 |cut --fields=1 --delimiter=:); tail --lines=+"$LINE" ~/.gitconfig; }; f"
   amend = commit --amend
