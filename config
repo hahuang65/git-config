@@ -110,6 +110,7 @@
   branch-name = rev-parse --abbrev-ref HEAD
   branch-name-or-commit = "!f() { git symbolic-ref --short -q HEAD || git rev-parse --short HEAD; }; f"
   change = "!f() { git switch hh/"${1}" 2> /dev/null || git switch "${1}"; }; f"
+  changes = "!f() { git log --no-merges --pretty=tformat:\"%h %ad %<(22,trunc)%an | %s%d\" --date=short --perl-regexp $(git merge-base ${1-main} HEAD)..HEAD; }; f"
   cleanup = "!f() { CURRENT_BRANCH=$(git branch-name); git switch $(git trunk-branch) > /dev/null 2>&1 && git branch -vv | awk '/: gone]/{print $1}' | xargs --no-run-if-empty --max-args=1 git branch --delete --force; git switch "$CURRENT_BRANCH" > /dev/null 2>&1; }; f"
   conflicts = diff --name-only --diff-filter=U
   dash = !gh dash
