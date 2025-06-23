@@ -5,8 +5,11 @@
 [includeIf "hasconfig:remote.*.url:git@github.com:summit-partners/**"]
   path = ~/.a5.gitconfig
 [url "git@github.com:"]
-	pushInsteadOf = "https://github.com/"
+	pushInsteadOf = "https://github.com/hahuang65"
   insteadOf = "gh:"
+[url "git@github.com:summit-partners/"]
+	pushInsteadOf = "https://github.com/summit-partners"
+  insteadOf = "sp:"
 [url "git@git.sr.ht:"]
 	pushInsteadOf = "https://git.sr.ht/"
   insteadOf = "srht:"
