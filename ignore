@@ -27,3 +27,8 @@ spec/tmp/*
 
 # Snyk #
 .dccache
+
+# AI #
+.crush/
+AGENTS.md
+CRUSH.md
