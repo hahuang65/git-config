@@ -19,7 +19,7 @@
   excludesfile = ~/.gitignore_global
   editor = nvim
   fsmonitor = true
-  pager = delta
+  pager = delta --pager='ov -F'
   untrackedCache = true
 [branch]
   sort = -committerdate
@@ -31,7 +31,7 @@
 [delta "colorscheme"]
   commit-style                  = raw
   commit-decorations-style      = blue ol
-  file-style                    = omit
+  file-style                    = yellow
   hunk-header-style             = file line-number
   hunk-header-decoration-style  = blue box
   hunk-header-file-style        = red
@@ -55,6 +55,10 @@
 [delta "interactive"]
   features = colorscheme
   keep-plus-minus-markers = false
+[delta "ov-diff"]
+  pager=ov -F --section-delimiter '^(commit|added:|removed:|renamed:|Δ)' --section-header --pattern '•'
+[delta "ov-log"]
+  pager=ov -F --section-delimiter '^commit' --section-header-num 3
 [delta]
   features = colorscheme
   navigate = true
@@ -83,9 +87,10 @@
   date = iso
 [pager]
   blame  = delta
-  diff   = delta
   reflog = delta
-  show   = delta
+  diff = delta --features ov-diff
+  log  = delta --features ov-log
+  show = delta --pager='ov -F --header 3'
 [merge]
   conflictstyle = zdiff3
 [pull]
