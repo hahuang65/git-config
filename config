@@ -7,6 +7,9 @@
 [url "git@github.com:"]
 	pushInsteadOf = "https://github.com/hahuang65"
   insteadOf = "gh:"
+[url "git@github.com:bitsmithy/"]
+	pushInsteadOf = "https://github.com/bitsmithy"
+  insteadOf = "bs:"
 [url "git@github.com:summit-partners/"]
 	pushInsteadOf = "https://github.com/summit-partners"
   insteadOf = "sp:"
