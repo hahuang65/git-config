@@ -53,6 +53,6 @@ tasks:
 
       echo "Pushing repository, as mirror, to git@github.com:${GH_REPO}"
       git remote add github --mirror=push "git@github.com:${GH_REPO}"
-      ssh-keyscan github.com 2>/dev/null | grep -v \# >> ~/.ssh/known_hosts
+      curl --silent https://api.github.com/meta | jq --raw-output '"github.com "+.ssh_keys[]' >> ~/.ssh/known_hosts
       git push github --mirror
       echo "Done."
