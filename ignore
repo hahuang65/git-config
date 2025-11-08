@@ -32,3 +32,4 @@ spec/tmp/*
 .crush/
 AGENTS.md
 CRUSH.md
+.claude/settings.local.json
