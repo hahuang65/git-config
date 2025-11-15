@@ -140,4 +140,4 @@
   untag = "!f() { git tag --delete "${1}" && git push origin :refs/tags/"${1}"; }; f"
   unwip = "!f() { git log --format=%s -n 1 | grep WIP > /dev/null && git reset HEAD^; echo "Now on `git log -n 1 --format='%Cred%h%Creset - %s %Cgreen(%cr) %C(bold blue)<%an>%Creset'`"; }; f"
   which = "!f() { git aliases | grep "${1}"; }; f"
-  wip = !git add --all && git commit --message "WIP"
+  wip = !git add --all && git commit --no-verify --message "WIP"
