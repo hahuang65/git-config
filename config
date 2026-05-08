@@ -7,8 +7,8 @@
 [includeIf "hasconfig:remote.*.url:sp:**"]
   path = ~/.a5.gitconfig
 [url "git@github.com:"]
-	pushInsteadOf = "https://github.com/hahuang65"
-  insteadOf = "gh:"
+	pushInsteadOf = "https://github.com/"
+	insteadOf = https://github.com/
 [url "git@github.com:bitsmithy/"]
 	pushInsteadOf = "https://github.com/bitsmithy"
   insteadOf = "bs:"
