@@ -133,6 +133,7 @@
   rename = "!f() { git unpublish && git branch --move hh/${1} && git publish; }; f"
   repo = !gh repo
   review = "!f() { git log --no-merges --author=h.huang65@gmail.com --author=hao@hwrd.me --since="${1}"; }; f"
+  search = log -p -S
   shove = push --force-with-lease
   state = status --short --branch --untracked-files
   sync = "!f() { git fetch --all --prune && git pull --rebase --autostash && git submodule update --init --recursive && git cleanup; }; f"
