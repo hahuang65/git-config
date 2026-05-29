@@ -9,15 +9,24 @@
 [url "git@github.com:"]
 	pushInsteadOf = "https://github.com/"
 	insteadOf = https://github.com/
+[url "git@github.com:"]
+	pushInsteadOf = "https://github.com/"
+	insteadOf = "gh:"
+[url "git@git.sr.ht:"]
+	pushInsteadOf = "https://git.sr.ht/"
+  insteadOf = "srht:"
+[url "git@github.com:hahuang65/"]
+	pushInsteadOf = "https://github.com/hahuang65"
+	insteadOf = "hahuang65:"
+[url "git@git.sr.ht:~hwrd/"]
+	pushInsteadOf = "https://git.sr.ht/~hwrd"
+  insteadOf = "hwrd:"
 [url "git@github.com:bitsmithy/"]
 	pushInsteadOf = "https://github.com/bitsmithy"
   insteadOf = "bs:"
 [url "git@github.com:summit-partners/"]
 	pushInsteadOf = "https://github.com/summit-partners"
   insteadOf = "sp:"
-[url "git@git.sr.ht:"]
-	pushInsteadOf = "https://git.sr.ht/"
-  insteadOf = "srht:"
 [init]
 	defaultBranch = main
 [core]
