@@ -1,0 +1,11 @@
+{
+  "name": "git-dotfiles",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/treehouse/*.test.mjs"
+  }
+}

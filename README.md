@@ -10,3 +10,9 @@ This includes some sensible (for me) settings, aliases, and a git commit message
 Run `./install.sh` to link the configuration files to the proper location
 
 To use the commit message template, simply run `git commit` and it should read the linked `~/.gitmessage` file.
+
+## Treehouse
+
+The installer also exposes the baseline `treehouse` worktree manager at `~/.local/bin/treehouse`.
+Treehouse requires Node.js 22 or newer and supports macOS and Linux.
+Run `treehouse --help` to inspect the available lifecycle commands.
