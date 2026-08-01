@@ -10,4 +10,4 @@ ln -sf "$repo_dir/ignore" "$HOME/.gitignore_global"
 ln -sf "$repo_dir/message" "$HOME/.gitmessage"
 
 mkdir -p "$HOME/.local/bin"
-ln -sf "$repo_dir/treehouse/bin/treehouse.mjs" "$HOME/.local/bin/treehouse"
+ln -sf "$repo_dir/orchard/bin/orchard.mjs" "$HOME/.local/bin/orchard"

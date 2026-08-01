@@ -6,6 +6,6 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test test/treehouse/*.test.mjs"
+    "test": "node --test test/orchard/*.test.mjs"
   }
 }

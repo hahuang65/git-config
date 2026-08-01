@@ -11,8 +11,9 @@ Run `./install.sh` to link the configuration files to the proper location
 
 To use the commit message template, simply run `git commit` and it should read the linked `~/.gitmessage` file.
 
-## Treehouse
+## Orchard
 
-The installer also exposes the baseline `treehouse` worktree manager at `~/.local/bin/treehouse`.
-Treehouse requires Node.js 22 or newer and supports macOS and Linux.
-Run `treehouse --help` to inspect the available lifecycle commands.
+The installer also exposes the baseline `orchard` worktree manager at `~/.local/bin/orchard`.
+Orchard requires Node.js 22 or newer and supports macOS and Linux.
+Run `orchard --help` to inspect the available lifecycle commands.
+`orchard merge` rebases a clean task branch onto synchronized trunk, automatically aborts conflicts, and advances trunk only by fast-forward without pushing.
