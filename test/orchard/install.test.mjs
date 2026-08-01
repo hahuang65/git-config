@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { lstat, mkdtemp, readlink } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readlink, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -11,6 +11,11 @@ const REPOSITORY = path.join(TEST_DIRECTORY, "../..");
 
 test("Git dotfiles installs the Orchard executable idempotently", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "orchard-install-"));
+  const executableDirectory = path.join(home, ".local/bin");
+  const legacyExecutable = path.join(executableDirectory, "treehouse");
+  await mkdir(executableDirectory, { recursive: true });
+  await symlink(path.join(REPOSITORY, "treehouse/bin/treehouse.mjs"), legacyExecutable);
+
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const output = spawnSync("sh", ["install.sh"], {
       cwd: REPOSITORY,
@@ -20,7 +25,8 @@ test("Git dotfiles installs the Orchard executable idempotently", async () => {
     assert.equal(output.status, 0, output.stderr);
   }
 
-  const executable = path.join(home, ".local/bin/orchard");
+  const executable = path.join(executableDirectory, "orchard");
   assert.equal((await lstat(executable)).isSymbolicLink(), true);
   assert.equal(await readlink(executable), path.join(REPOSITORY, "orchard/bin/orchard.mjs"));
+  await assert.rejects(lstat(legacyExecutable), { code: "ENOENT" });
 });
