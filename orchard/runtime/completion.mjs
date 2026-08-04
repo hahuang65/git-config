@@ -1,6 +1,6 @@
 import { readOrchardStatus } from "./status.mjs";
 
-const WORKTREE_TARGET_COMMANDS = new Set(["enter", "merge", "recycle"]);
+const WORKTREE_TARGET_COMMANDS = new Set(["enter", "rebase", "merge", "recycle"]);
 const PROJECT_TARGET_COMMANDS = new Set(["destroy", "prune"]);
 
 export async function readCompletionCandidates(command, options = {}) {

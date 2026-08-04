@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import { findMainProjectDirectory, findRepositoryRoot, runGit } from "./git.mjs";
-import { isTipAncestorOfTrunk } from "./landing.mjs";
+import { rebaseTaskOntoTrunk, resolveTaskSlot, validateTaskWorkspace } from "./integration.mjs";
 import { withProjectLock } from "./lock.mjs";
 import { pathsReferToSameLocation } from "./paths.mjs";
 import { recycleTask } from "./recycle-service.mjs";
 import { findProjectRegistry, saveProjectState } from "./registry.mjs";
-import { assertCleanWorktree, readCurrentBranch } from "./workspace-checks.mjs";
+import { synchronizeTrunk } from "./synchronize.mjs";
 
 export async function mergeTask({ cwd, home, intent, keep = false }) {
   const projectRoot = await findMainProjectDirectory(cwd);
@@ -22,73 +22,10 @@ export async function mergeTask({ cwd, home, intent, keep = false }) {
   });
 }
 
-async function resolveTaskSlot(registry, cwd, intent) {
-  if (intent) {
-    const slot = registry.state.slots.find((candidate) => candidate.lifecycle === "task" && candidate.intent === intent);
-    if (!slot) throw new Error(`No managed task worktree matches '${intent}'`);
-    return slot;
-  }
-  const checkoutRoot = await findRepositoryRoot(cwd);
-  let slot;
-  for (const candidate of registry.state.slots.filter((entry) => entry.lifecycle === "task")) {
-    if (checkoutRoot && await pathsReferToSameLocation(candidate.path, checkoutRoot)) {
-      slot = candidate;
-      break;
-    }
-  }
-  if (!slot) throw new Error("orchard merge requires a managed task worktree or explicit intent");
-  return slot;
-}
-
 async function validateMerge(registry, slot) {
   const { root: projectRoot, trunk } = registry.state.project;
-  if (slot.recovery) throw new Error(`Task worktree '${slot.intent}' has unresolved recovery state`);
-  await assertCleanWorktree(slot.path, "task worktree");
-  await assertCleanWorktree(projectRoot, "main project directory");
-  const branch = await readCurrentBranch(projectRoot);
-  if (branch !== trunk) throw new Error(`The main project directory must have trunk '${trunk}' checked out`);
-  const taskBranch = await readCurrentBranch(slot.path);
-  if (taskBranch !== slot.branch) throw new Error(`Task worktree must have branch '${slot.branch}' checked out`);
-  await assertTrunkMatchesUpstream(projectRoot, trunk);
-}
-
-async function rebaseTaskOntoTrunk(registry, slot) {
-  const { root: projectRoot, trunk } = registry.state.project;
-  const { stdout: originalTip } = await runGit(slot.path, ["rev-parse", "HEAD"]);
-  try {
-    await runGit(slot.path, ["rebase", trunk]);
-  } catch (error) {
-    try {
-      await runGit(slot.path, ["rebase", "--abort"]);
-    } catch (abortError) {
-      throw new AggregateError(
-        [error, abortError],
-        `Task rebase failed and its automatic abort also failed; recover the preserved worktree at ${slot.path}`,
-      );
-    }
-    const { stdout: restoredTip } = await runGit(slot.path, ["rev-parse", "HEAD"]);
-    if (restoredTip !== originalTip) {
-      throw new Error(`Task rebase failed and abort did not restore the original tip at ${slot.path}`);
-    }
-    throw new Error(`Task rebase encountered a conflict or other failure and was automatically aborted; trunk and task are unchanged`, { cause: error });
-  }
-  if (!await isTipAncestorOfTrunk(projectRoot, trunk, slot.branch)) {
-    throw new Error(`Rebased task '${slot.branch}' cannot fast-forward trunk '${trunk}'`);
-  }
-}
-
-async function assertTrunkMatchesUpstream(projectRoot, trunk) {
-  await runGit(projectRoot, ["fetch", "--all", "--prune"]);
-  let upstream;
-  try {
-    ({ stdout: upstream } = await runGit(projectRoot, ["rev-parse", "--abbrev-ref", `${trunk}@{upstream}`]));
-  } catch (error) {
-    if (error?.code === 128) return;
-    throw error;
-  }
-  const { stdout: trunkTip } = await runGit(projectRoot, ["rev-parse", trunk]);
-  const { stdout: upstreamTip } = await runGit(projectRoot, ["rev-parse", upstream]);
-  if (trunkTip !== upstreamTip) throw new Error(`Trunk '${trunk}' is not synchronized with '${upstream}'`);
+  await validateTaskWorkspace(registry, slot);
+  await synchronizeTrunk(projectRoot, trunk);
 }
 
 export async function finalizeMergedTask({ cwd, home, operationId }) {

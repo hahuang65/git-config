@@ -6,13 +6,14 @@ import { writeManagedReturnRequest } from "./managed-return.mjs";
 import { finalizeMergedTask, mergeTask } from "./merge-service.mjs";
 import { createMachineOutcome } from "./protocol.mjs";
 import { pruneProject } from "./prune-service.mjs";
+import { rebaseTask } from "./rebase-service.mjs";
 import { recoverAllProjects } from "./recovery.mjs";
 import { recycleTask } from "./recycle-service.mjs";
 import { acquireTask } from "./service.mjs";
 import { openManagedShell } from "./shell.mjs";
 import { formatOrchardStatus, readOrchardStatus, shouldUseColor } from "./status.mjs";
 
-const COMMAND_NAMES = Object.freeze(["new", "convert", "status", "enter", "merge", "recycle", "prune", "destroy"]);
+const COMMAND_NAMES = Object.freeze(["new", "convert", "status", "enter", "rebase", "merge", "recycle", "prune", "destroy"]);
 const COMMANDS = new Set(COMMAND_NAMES);
 
 const TOP_LEVEL_HELP = `Orchard manages reusable, branch-bound Git worktrees.
@@ -24,6 +25,7 @@ Commands:
   convert   Convert a local task branch
   status    Show managed worktrees (default)
   enter     Enter an existing task worktree
+  rebase    Synchronize trunk and rebase a task branch
   merge     Rebase a task branch and fast-forward trunk
   recycle   Return landed work to the available pool
   prune     Preview or remove excess available worktrees
@@ -94,6 +96,16 @@ Options:
 
 Safety: concurrent entry is refused unless --share is explicit.
 Failure: unknown tasks, invalid owners, and unsafe sharing stop without changing task lifecycle.
+`,
+  rebase: `Synchronize trunk, then rebase a clean managed task branch onto it.
+
+Usage: orchard rebase [intent] [--json]
+
+Options:
+  --json  Emit a versioned machine-readable outcome.
+
+Safety: rebase requires clean task and trunk worktrees, fast-forwards a behind trunk, accepts a local trunk ahead of upstream, refuses divergence, automatically aborts conflicts, and never pushes.
+Failure: dirty, unmanaged, divergent, or conflicting work remains preserved; use the commit workflow before rebasing a dirty task.
 `,
   merge: `Rebase a managed task branch onto trunk, then fast-forward trunk from the main project directory.
 
@@ -205,6 +217,17 @@ export async function runOrchardCli(args, io = console) {
     io.log(args.includes("--json")
       ? JSON.stringify(createMachineOutcome(command, outcome))
       : `${outcome.applied ? "Applied" : "Preview"}: ${outcome.plan.remove.length} removable slot(s)`);
+    return 0;
+  }
+  if (command === "rebase") {
+    const outcome = await rebaseTask({
+      cwd: process.cwd(),
+      home: process.env.HOME,
+      intent: args[1]?.startsWith("--") ? undefined : args[1],
+    });
+    io.log(args.includes("--json")
+      ? JSON.stringify(createMachineOutcome(command, outcome))
+      : `Rebased ${outcome.worktree.branch} onto ${outcome.project.trunk}`);
     return 0;
   }
   if (command === "merge") {

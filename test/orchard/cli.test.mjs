@@ -44,7 +44,7 @@ test("top-level help documents every command and compatibility boundary", async 
   assert.equal(output.exitCode, 0);
   assert.equal(output.stderr, "");
   assert.match(output.stdout, /Usage: orchard \[command\]/);
-  for (const command of ["new", "convert", "status", "enter", "merge", "recycle", "prune", "destroy"]) {
+  for (const command of ["new", "convert", "status", "enter", "rebase", "merge", "recycle", "prune", "destroy"]) {
     assert.match(output.stdout, new RegExp(`\\b${command}\\b`));
   }
   assert.match(output.stdout, /Node\.js 22\+/);
@@ -65,7 +65,7 @@ test("completion suggests top-level commands", async () => {
   const output = await runOrchard(["__complete"]);
 
   assert.deepEqual(output, {
-    stdout: "new\nconvert\nstatus\nenter\nmerge\nrecycle\nprune\ndestroy\n",
+    stdout: "new\nconvert\nstatus\nenter\nrebase\nmerge\nrecycle\nprune\ndestroy\n",
     stderr: "",
     exitCode: 0,
   });
@@ -85,7 +85,7 @@ test("completion suggests active worktrees for worktree-targeting commands", asy
     { lifecycle: "task", intent: "other-task", branch: "hh/other-task", path: "/other-task" },
   ]);
 
-  for (const command of ["enter", "merge", "recycle"]) {
+  for (const command of ["enter", "rebase", "merge", "recycle"]) {
     const output = await runOrchard(["__complete", command], { cwd: repository, home });
     assert.deepEqual(output, {
       stdout: "first-task\nsecond-task\n",
@@ -135,6 +135,7 @@ test("every subcommand help is comprehensive and never mutates Orchard state", a
     convert: ["<intent>", "--print-path", "--json"],
     status: ["--all", "--refresh", "--json"],
     enter: ["<intent>", "--share", "--owner-pid", "--release-owner", "--print-path", "--json"],
+    rebase: ["--json"],
     merge: ["--keep", "--finalize", "--json"],
     recycle: ["<intent>", "--keep-branch", "--json"],
     prune: ["--apply", "--json"],

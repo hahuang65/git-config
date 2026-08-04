@@ -167,7 +167,7 @@ test("merge refuses when trunk is not checked out in the main project directory"
   assert.equal(git(repository, ["branch", "--show-current"]), "maintenance");
 });
 
-test("merge fetches remote metadata and refuses stale local trunk", async () => {
+test("merge fast-forwards a behind trunk before rebasing the task", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
   const repository = await createRepository(home);
   const origin = path.join(home, "origin.git");
@@ -175,7 +175,53 @@ test("merge fetches remote metadata and refuses stale local trunk", async () => 
   git(repository, ["remote", "add", "origin", origin]);
   git(repository, ["push", "--set-upstream", "origin", "main"]);
   const task = await createTask(home, repository, "Stale Trunk");
-  const originalTrunk = git(repository, ["rev-parse", "main"]);
+  const updater = path.join(home, "updater");
+  git(home, ["clone", origin, updater]);
+  await writeFile(path.join(updater, "remote.txt"), "remote update\n");
+  git(updater, ["add", "remote.txt"]);
+  git(updater, ["-c", "user.name=Orchard Test", "-c", "user.email=test@example.com", "commit", "-m", "remote update"]);
+  git(updater, ["push"]);
+  const remoteTip = git(updater, ["rev-parse", "HEAD"]);
+
+  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
+
+  assert.equal(output.exitCode, 0, output.stderr);
+  assert.equal(git(task.path, ["rev-parse", "HEAD^"]), remoteTip);
+  assert.equal(git(repository, ["rev-parse", "main"]), git(task.path, ["rev-parse", "HEAD"]));
+});
+
+test("merge accepts local trunk commits ahead of its upstream", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+  const repository = await createRepository(home);
+  const origin = path.join(home, "origin.git");
+  git(home, ["init", "--bare", "--initial-branch=main", origin]);
+  git(repository, ["remote", "add", "origin", origin]);
+  git(repository, ["push", "--set-upstream", "origin", "main"]);
+  const task = await createTask(home, repository, "Ahead Trunk");
+  await writeFile(path.join(repository, "local-main.txt"), "local main\n");
+  git(repository, ["add", "local-main.txt"]);
+  git(repository, ["-c", "user.name=Orchard Test", "-c", "user.email=test@example.com", "commit", "-m", "local main"]);
+  const localMainTip = git(repository, ["rev-parse", "HEAD"]);
+
+  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
+
+  assert.equal(output.exitCode, 0, output.stderr);
+  assert.equal(git(task.path, ["rev-parse", "HEAD^"]), localMainTip);
+  assert.equal(git(repository, ["rev-parse", "main"]), git(task.path, ["rev-parse", "HEAD"]));
+});
+
+test("merge refuses when local trunk and its upstream have diverged", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+  const repository = await createRepository(home);
+  const origin = path.join(home, "origin.git");
+  git(home, ["init", "--bare", "--initial-branch=main", origin]);
+  git(repository, ["remote", "add", "origin", origin]);
+  git(repository, ["push", "--set-upstream", "origin", "main"]);
+  const task = await createTask(home, repository, "Diverged Trunk");
+  await writeFile(path.join(repository, "local-main.txt"), "local main\n");
+  git(repository, ["add", "local-main.txt"]);
+  git(repository, ["-c", "user.name=Orchard Test", "-c", "user.email=test@example.com", "commit", "-m", "local main"]);
+  const localMainTip = git(repository, ["rev-parse", "HEAD"]);
   const updater = path.join(home, "updater");
   git(home, ["clone", origin, updater]);
   await writeFile(path.join(updater, "remote.txt"), "remote update\n");
@@ -186,8 +232,41 @@ test("merge fetches remote metadata and refuses stale local trunk", async () => 
   const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
 
   assert.equal(output.exitCode, 1);
-  assert.match(output.stderr, /not synchronized with 'origin\/main'/);
-  assert.equal(git(repository, ["rev-parse", "main"]), originalTrunk);
+  assert.match(output.stderr, /diverged from 'origin\/main'/);
+  assert.equal(git(repository, ["rev-parse", "main"]), localMainTip);
+});
+
+test("merge refuses divergence before invoking a rebase-capable sync alias", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+  const repository = await createRepository(home);
+  const origin = path.join(home, "origin.git");
+  git(home, ["init", "--bare", "--initial-branch=main", origin]);
+  git(repository, ["remote", "add", "origin", origin]);
+  git(repository, ["push", "--set-upstream", "origin", "main"]);
+  const task = await createTask(home, repository, "Alias Divergence");
+  await writeFile(path.join(repository, "local-main.txt"), "local main\n");
+  git(repository, ["add", "local-main.txt"]);
+  git(repository, ["-c", "user.name=Orchard Test", "-c", "user.email=test@example.com", "commit", "-m", "local main"]);
+  const localMainTip = git(repository, ["rev-parse", "HEAD"]);
+  const updater = path.join(home, "updater");
+  git(home, ["clone", origin, updater]);
+  await writeFile(path.join(updater, "remote.txt"), "remote update\n");
+  git(updater, ["add", "remote.txt"]);
+  git(updater, ["-c", "user.name=Orchard Test", "-c", "user.email=test@example.com", "commit", "-m", "remote update"]);
+  git(updater, ["push"]);
+  const globalConfig = path.join(home, "global.gitconfig");
+  const marker = path.join(home, "sync-alias-ran");
+  git(home, ["config", "--file", globalConfig, "alias.sync", "!f() { printf invoked > \"$ORCHARD_SYNC_MARKER\"; git pull --rebase --autostash; }; f"]);
+
+  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"], {
+    GIT_CONFIG_GLOBAL: globalConfig,
+    ORCHARD_SYNC_MARKER: marker,
+  });
+
+  assert.equal(output.exitCode, 1);
+  assert.match(output.stderr, /diverged from 'origin\/main'/);
+  assert.equal(git(repository, ["rev-parse", "main"]), localMainTip);
+  await assert.rejects(access(marker), { code: "ENOENT" });
 });
 
 test("default merge finalizes recycling only after the caller returns to main", async () => {

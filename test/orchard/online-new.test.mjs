@@ -147,8 +147,22 @@ test("a successful sync alias must still satisfy trunk postconditions", async ()
   });
 
   assert.equal(output.exitCode, 1);
-  assert.match(output.stderr, /did not align 'main' with 'origin\/main'/);
+  assert.match(output.stderr, /left trunk 'main' behind 'origin\/main'/);
   assert.equal(git(repository, ["branch", "--list", "stale-alias"]), "");
+});
+
+test("online acquisition accepts local trunk commits ahead of upstream", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-online-"));
+  const { repository } = await createRemoteRepository(home);
+  await commitFile(repository, "local.txt", "local work\n", "local work");
+  const localTip = git(repository, ["rev-parse", "HEAD"]);
+
+  const output = await runOrchard(repository, home, ["new", "Local Ahead", "--json"]);
+
+  assert.equal(output.exitCode, 0, output.stderr);
+  const acquired = JSON.parse(output.stdout);
+  assert.equal(git(repository, ["rev-parse", "main"]), localTip);
+  assert.equal(git(acquired.worktree.path, ["rev-parse", "HEAD"]), localTip);
 });
 
 test("online acquisition resolves trunk from remote metadata instead of the current branch", async () => {
