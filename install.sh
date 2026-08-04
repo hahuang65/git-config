@@ -18,3 +18,8 @@ if [ -L "$legacy_orchard_name" ]; then
   esac
 fi
 ln -sf "$repo_dir/orchard/bin/orchard.mjs" "$HOME/.local/bin/orchard"
+
+completion_root=${BASH_COMPLETION_USER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion}
+completion_root=${completion_root%%:*}
+mkdir -p "$completion_root/completions"
+ln -sf "$repo_dir/orchard/completions/orchard.bash" "$completion_root/completions/orchard"

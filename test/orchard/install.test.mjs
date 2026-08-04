@@ -19,14 +19,17 @@ test("Git dotfiles installs the Orchard executable idempotently", async () => {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const output = spawnSync("sh", ["install.sh"], {
       cwd: REPOSITORY,
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, BASH_COMPLETION_USER_DIR: "", XDG_DATA_HOME: "" },
       encoding: "utf8",
     });
     assert.equal(output.status, 0, output.stderr);
   }
 
   const executable = path.join(executableDirectory, "orchard");
+  const completion = path.join(home, ".local/share/bash-completion/completions/orchard");
   assert.equal((await lstat(executable)).isSymbolicLink(), true);
   assert.equal(await readlink(executable), path.join(REPOSITORY, "orchard/bin/orchard.mjs"));
+  assert.equal((await lstat(completion)).isSymbolicLink(), true);
+  assert.equal(await readlink(completion), path.join(REPOSITORY, "orchard/completions/orchard.bash"));
   await assert.rejects(lstat(legacyExecutable), { code: "ENOENT" });
 });

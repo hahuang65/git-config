@@ -61,6 +61,58 @@ test("unknown commands fail with usage guidance", async () => {
   assert.match(output.stderr, /orchard --help/);
 });
 
+test("completion suggests top-level commands", async () => {
+  const output = await runOrchard(["__complete"]);
+
+  assert.deepEqual(output, {
+    stdout: "new\nconvert\nstatus\nenter\nmerge\nrecycle\nprune\ndestroy\n",
+    stderr: "",
+    exitCode: 0,
+  });
+});
+
+test("completion suggests active worktrees for worktree-targeting commands", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-home-"));
+  const repository = path.join(home, "projects", "alpha");
+  await mkdir(repository, { recursive: true });
+  git(repository, ["init", "--initial-branch=main"]);
+  await writeProjectState(home, "alpha", repository, [
+    { lifecycle: "task", intent: "second-task", branch: "hh/second-task", path: "/second-task" },
+    { lifecycle: "available", intent: null, branch: null, path: "/available" },
+    { lifecycle: "task", intent: "first-task", branch: "hh/first-task", path: "/first-task" },
+  ]);
+  await writeProjectState(home, "beta", path.join(home, "projects", "beta"), [
+    { lifecycle: "task", intent: "other-task", branch: "hh/other-task", path: "/other-task" },
+  ]);
+
+  for (const command of ["enter", "merge", "recycle"]) {
+    const output = await runOrchard(["__complete", command], { cwd: repository, home });
+    assert.deepEqual(output, {
+      stdout: "first-task\nsecond-task\n",
+      stderr: "",
+      exitCode: 0,
+    });
+  }
+});
+
+test("completion suggests the current project for project-level commands", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-home-"));
+  const repository = path.join(home, "projects", "alpha");
+  await mkdir(repository, { recursive: true });
+  git(repository, ["init", "--initial-branch=main"]);
+  await writeProjectState(home, "alpha", repository);
+  await writeProjectState(home, "beta", path.join(home, "projects", "beta"));
+
+  for (const command of ["destroy", "prune"]) {
+    const output = await runOrchard(["__complete", command], { cwd: repository, home });
+    assert.deepEqual(output, {
+      stdout: "alpha\n",
+      stderr: "",
+      exitCode: 0,
+    });
+  }
+});
+
 test("status help documents scope and output controls", async () => {
   const output = await runOrchard(["status", "--help"]);
 

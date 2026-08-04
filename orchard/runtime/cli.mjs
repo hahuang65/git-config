@@ -1,3 +1,4 @@
+import { readCompletionCandidates } from "./completion.mjs";
 import { convertTaskBranch } from "./conversion-service.mjs";
 import { destroyProject } from "./destroy-service.mjs";
 import { enterTask, releaseTaskOwner } from "./entry-service.mjs";
@@ -11,7 +12,8 @@ import { acquireTask } from "./service.mjs";
 import { openManagedShell } from "./shell.mjs";
 import { formatOrchardStatus, readOrchardStatus, shouldUseColor } from "./status.mjs";
 
-const COMMANDS = new Set(["new", "convert", "status", "enter", "merge", "recycle", "prune", "destroy"]);
+const COMMAND_NAMES = Object.freeze(["new", "convert", "status", "enter", "merge", "recycle", "prune", "destroy"]);
+const COMMANDS = new Set(COMMAND_NAMES);
 
 const TOP_LEVEL_HELP = `Orchard manages reusable, branch-bound Git worktrees.
 
@@ -151,6 +153,13 @@ export async function runOrchardCli(args, io = console) {
     return 0;
   }
   const command = args[0] ?? "status";
+  if (command === "__complete") {
+    const candidates = args[1]
+      ? await readCompletionCandidates(args[1], { cwd: process.cwd(), home: process.env.HOME })
+      : COMMAND_NAMES;
+    if (candidates.length > 0) io.log(candidates.join("\n"));
+    return 0;
+  }
   if (COMMANDS.has(command) && (args.includes("--help") || args.includes("-h"))) {
     io.log(COMMAND_HELP[command]);
     return 0;
