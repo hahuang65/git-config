@@ -33,7 +33,7 @@ async function resolveTaskSlot(registry, cwd, intent) {
   return slot;
 }
 
-async function validateRecyclable(registry, slot, cwd) {
+export async function validateRecyclable(registry, slot, cwd) {
   if (slot.recovery) throw new Error(`Task worktree '${slot.intent}' has unresolved recovery state`);
   if (refreshTaskOwners(slot).length > 0) throw new Error(`Task worktree '${slot.intent}' is occupied`);
   const callerRoot = await findRepositoryRoot(cwd);
@@ -52,7 +52,7 @@ async function validateRecyclable(registry, slot, cwd) {
   return proof;
 }
 
-async function recycleSlot(registry, slot, { keepBranch, proof }) {
+export async function recycleSlot(registry, slot, { keepBranch, proof }) {
   const branch = slot.branch;
   const cleanupOperationId = slot.pendingCleanup?.operationId;
   const poolDirectory = path.join(registry.directory, ".pool");

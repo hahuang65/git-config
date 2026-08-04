@@ -17,6 +17,9 @@ The installer also exposes the baseline `orchard` worktree manager at `~/.local/
 It registers Bash completion for Orchard commands, active worktree intents, and project-level targets.
 Orchard requires Node.js 22 or newer and supports macOS and Linux.
 Run `orchard --help` to inspect the available lifecycle commands.
-`orchard rebase` synchronizes tracked trunk and rebases a clean task branch without integrating it.
-`orchard merge` performs the same synchronization and rebase before advancing trunk only by fast-forward without pushing.
+`orchard rebase [worktree]` synchronizes tracked trunk and rebases a clean task branch without delivering it.
+`orchard deliver [worktree]` shows dirty status, offers an interactive Git commit, then applies the trusted user-level delivery strategy.
+Local delivery rebases and fast-forwards trunk without pushing; pull-request delivery rebases and opens exactly `git pr create --web --fill` only when published history remains fast-forward safe.
+Both commands infer the current task inside its worktree or accept a worktree intent from the primary trunk checkout.
+A local delivery invoked from primary trunk recycles immediately; task-worktree invocation returns through Orchard before cleanup, with `orchard deliver --finalize <worktree>` as the human-readable fallback.
 Synchronization fast-forwards a behind trunk, accepts unpublished local trunk commits ahead of upstream, and refuses histories that have diverged.

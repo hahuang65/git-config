@@ -9,13 +9,39 @@ import { fileURLToPath } from "node:url";
 const TEST_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const COMPLETION_PATH = path.join(TEST_DIRECTORY, "../../orchard/completions/orchard.bash");
 
-test("Bash completion filters dynamic worktree candidates by the current word", async () => {
+async function createFakeOrchard() {
   const directory = await mkdtemp(path.join(tmpdir(), "orchard-completion-"));
   const binDirectory = path.join(directory, "bin");
   const fakeOrchard = path.join(binDirectory, "orchard");
   await mkdir(binDirectory);
   await writeFile(fakeOrchard, "#!/bin/sh\nprintf 'other-task\\nstatus-output\\n'\n");
   await chmod(fakeOrchard, 0o755);
+  return binDirectory;
+}
+
+test("Bash completion suggests top-level commands from the current word", async () => {
+  const binDirectory = await createFakeOrchard();
+
+  const output = spawnSync("bash", ["-c", [
+    "source \"$1\"",
+    "COMP_WORDS=(orchard oth)",
+    "COMP_CWORD=1",
+    "_orchard_completion",
+    "printf '%s\\n' \"${COMPREPLY[@]}\"",
+  ].join("\n"), "completion-test", COMPLETION_PATH], {
+    env: { ...process.env, PATH: `${binDirectory}:${process.env.PATH}` },
+    encoding: "utf8",
+  });
+
+  assert.deepEqual({ stdout: output.stdout, stderr: output.stderr, status: output.status }, {
+    stdout: "other-task\n",
+    stderr: "",
+    status: 0,
+  });
+});
+
+test("Bash completion filters dynamic worktree candidates by the current word", async () => {
+  const binDirectory = await createFakeOrchard();
 
   const output = spawnSync("bash", ["-c", [
     "source \"$1\"",
@@ -30,6 +56,27 @@ test("Bash completion filters dynamic worktree candidates by the current word", 
 
   assert.deepEqual({ stdout: output.stdout, stderr: output.stderr, status: output.status }, {
     stdout: "status-output\n",
+    stderr: "",
+    status: 0,
+  });
+});
+
+test("Bash completion suggests worktrees for human-readable delivery finalization", async () => {
+  const binDirectory = await createFakeOrchard();
+
+  const output = spawnSync("bash", ["-c", [
+    "source \"$1\"",
+    "COMP_WORDS=(orchard deliver --finalize oth)",
+    "COMP_CWORD=3",
+    "_orchard_completion",
+    "printf '%s\\n' \"${COMPREPLY[@]}\"",
+  ].join("\n"), "completion-test", COMPLETION_PATH], {
+    env: { ...process.env, PATH: `${binDirectory}:${process.env.PATH}` },
+    encoding: "utf8",
+  });
+
+  assert.deepEqual({ stdout: output.stdout, stderr: output.stderr, status: output.status }, {
+    stdout: "other-task\n",
     stderr: "",
     status: 0,
   });

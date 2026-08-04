@@ -44,7 +44,7 @@ test("top-level help documents every command and compatibility boundary", async 
   assert.equal(output.exitCode, 0);
   assert.equal(output.stderr, "");
   assert.match(output.stdout, /Usage: orchard \[command\]/);
-  for (const command of ["new", "convert", "status", "enter", "rebase", "merge", "recycle", "prune", "destroy"]) {
+  for (const command of ["new", "convert", "status", "enter", "rebase", "deliver", "recycle", "prune", "destroy"]) {
     assert.match(output.stdout, new RegExp(`\\b${command}\\b`));
   }
   assert.match(output.stdout, /Node\.js 22\+/);
@@ -61,11 +61,18 @@ test("unknown commands fail with usage guidance", async () => {
   assert.match(output.stderr, /orchard --help/);
 });
 
+test("the retired merge command fails with delivery guidance", async () => {
+  const output = await runOrchard(["merge"]);
+
+  assert.equal(output.exitCode, 2);
+  assert.match(output.stderr, /Use 'orchard deliver'/);
+});
+
 test("completion suggests top-level commands", async () => {
   const output = await runOrchard(["__complete"]);
 
   assert.deepEqual(output, {
-    stdout: "new\nconvert\nstatus\nenter\nrebase\nmerge\nrecycle\nprune\ndestroy\n",
+    stdout: "new\nconvert\nstatus\nenter\nrebase\ndeliver\nrecycle\nprune\ndestroy\n",
     stderr: "",
     exitCode: 0,
   });
@@ -85,7 +92,7 @@ test("completion suggests active worktrees for worktree-targeting commands", asy
     { lifecycle: "task", intent: "other-task", branch: "hh/other-task", path: "/other-task" },
   ]);
 
-  for (const command of ["enter", "rebase", "merge", "recycle"]) {
+  for (const command of ["enter", "rebase", "deliver", "recycle"]) {
     const output = await runOrchard(["__complete", command], { cwd: repository, home });
     assert.deepEqual(output, {
       stdout: "first-task\nsecond-task\n",
@@ -136,7 +143,7 @@ test("every subcommand help is comprehensive and never mutates Orchard state", a
     status: ["--all", "--refresh", "--json"],
     enter: ["<intent>", "--share", "--owner-pid", "--release-owner", "--print-path", "--json"],
     rebase: ["--json"],
-    merge: ["--keep", "--finalize", "--json"],
+    deliver: ["--keep", "--finalize", "--json"],
     recycle: ["<intent>", "--keep-branch", "--json"],
     prune: ["--apply", "--json"],
     destroy: ["--apply", "--allow-unlanded", "--allow-live-use", "--allow-unverifiable", "--delete-branches", "--json"],

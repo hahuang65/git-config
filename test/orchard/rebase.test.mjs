@@ -83,6 +83,42 @@ test("rebase synchronizes a behind trunk before rebasing the active task", async
   assert.equal(git(task.path, ["rev-parse", "HEAD^"]), remoteTip);
 });
 
+test("rebase accepts a task worktree name from primary trunk", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { repository } = await createRemoteRepository(home);
+  const task = await createTask(home, repository, "Named Task");
+  const originalTaskTip = git(task.path, ["rev-parse", "HEAD"]);
+  await commitFile(repository, "local-main.txt", "local main\n", "local main");
+  const trunkTip = git(repository, ["rev-parse", "HEAD"]);
+
+  const output = await runOrchard(repository, home, ["rebase", "named-task", "--json"]);
+
+  assert.equal(output.exitCode, 0, output.stderr);
+  assert.notEqual(git(task.path, ["rev-parse", "HEAD"]), originalTaskTip);
+  assert.equal(git(task.path, ["rev-parse", "HEAD^"]), trunkTip);
+});
+
+test("named rebase from primary trunk refuses an occupied task", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { repository } = await createRemoteRepository(home);
+  const task = await createTask(home, repository, "Occupied Rebase");
+  const taskTip = git(task.path, ["rev-parse", "HEAD"]);
+  const entered = await runOrchard(repository, home, [
+    "enter",
+    task.intent,
+    "--owner-pid",
+    String(process.pid),
+    "--json",
+  ]);
+  assert.equal(entered.exitCode, 0, entered.stderr);
+
+  const output = await runOrchard(repository, home, ["rebase", task.intent, "--json"]);
+
+  assert.equal(output.exitCode, 1);
+  assert.match(output.stderr, /is occupied/);
+  assert.equal(git(task.path, ["rev-parse", "HEAD"]), taskTip);
+});
+
 test("rebase accepts local trunk commits ahead of its upstream", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
   const { repository } = await createRemoteRepository(home);

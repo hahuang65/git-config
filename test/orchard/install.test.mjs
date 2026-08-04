@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { lstat, mkdir, mkdtemp, readlink, symlink } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -8,6 +8,13 @@ import { spawnSync } from "node:child_process";
 
 const TEST_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const REPOSITORY = path.join(TEST_DIRECTORY, "../..");
+
+test("A5 configuration selects one machine-readable project family and delivery strategy", async () => {
+  const configuration = await readFile(path.join(REPOSITORY, "a5.config"), "utf8");
+
+  assert.match(configuration, /\[ai\]\s+projectFamily = a5/);
+  assert.match(configuration, /\[orchard\]\s+deliveryStrategy = pull-request/);
+});
 
 test("Git dotfiles installs the Orchard executable idempotently", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "orchard-install-"));

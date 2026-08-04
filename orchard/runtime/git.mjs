@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -16,6 +16,19 @@ export async function runGit(cwd, args, options = {}) {
   return { stdout: stdout.trimEnd(), stderr: stderr.trimEnd() };
 }
 
+export async function runGitInteractive(cwd, args, options = {}) {
+  const child = spawn("git", args, {
+    cwd,
+    env: options.env ?? process.env,
+    stdio: "inherit",
+  });
+  const exitCode = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", resolve);
+  });
+  if (exitCode !== 0) throw new Error(`Interactive Git command exited with status ${exitCode}`);
+}
+
 export async function readGlobalAlias(cwd, name) {
   try {
     const { stdout } = await runGit(cwd, ["config", "--global", "--get", `alias.${name}`]);
@@ -26,8 +39,8 @@ export async function readGlobalAlias(cwd, name) {
   }
 }
 
-export async function runTrustedAlias(cwd, name, definition, args = []) {
-  return runGit(cwd, ["-c", `alias.${name}=${definition}`, name, ...args]);
+export async function runTrustedAlias(cwd, name, definition, args = [], options = {}) {
+  return runGit(cwd, ["-c", `alias.${name}=${definition}`, name, ...args], options);
 }
 
 export async function findMainProjectDirectory(cwd) {

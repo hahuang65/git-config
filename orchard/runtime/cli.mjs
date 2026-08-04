@@ -1,9 +1,9 @@
 import { readCompletionCandidates } from "./completion.mjs";
 import { convertTaskBranch } from "./conversion-service.mjs";
 import { destroyProject } from "./destroy-service.mjs";
+import { runDeliverCli } from "./deliver-cli.mjs";
 import { enterTask, releaseTaskOwner } from "./entry-service.mjs";
-import { writeManagedReturnRequest } from "./managed-return.mjs";
-import { finalizeMergedTask, mergeTask } from "./merge-service.mjs";
+import { finalizeLocalDelivery } from "./local-delivery.mjs";
 import { createMachineOutcome } from "./protocol.mjs";
 import { pruneProject } from "./prune-service.mjs";
 import { rebaseTask } from "./rebase-service.mjs";
@@ -13,7 +13,7 @@ import { acquireTask } from "./service.mjs";
 import { openManagedShell } from "./shell.mjs";
 import { formatOrchardStatus, readOrchardStatus, shouldUseColor } from "./status.mjs";
 
-const COMMAND_NAMES = Object.freeze(["new", "convert", "status", "enter", "rebase", "merge", "recycle", "prune", "destroy"]);
+const COMMAND_NAMES = Object.freeze(["new", "convert", "status", "enter", "rebase", "deliver", "recycle", "prune", "destroy"]);
 const COMMANDS = new Set(COMMAND_NAMES);
 
 const TOP_LEVEL_HELP = `Orchard manages reusable, branch-bound Git worktrees.
@@ -26,7 +26,7 @@ Commands:
   status    Show managed worktrees (default)
   enter     Enter an existing task worktree
   rebase    Synchronize trunk and rebase a task branch
-  merge     Rebase a task branch and fast-forward trunk
+  deliver   Commit if requested, then apply project delivery policy
   recycle   Return landed work to the available pool
   prune     Preview or remove excess available worktrees
   destroy   Preview or destroy a project group
@@ -107,18 +107,18 @@ Options:
 Safety: rebase requires clean task and trunk worktrees, fast-forwards a behind trunk, accepts a local trunk ahead of upstream, refuses divergence, automatically aborts conflicts, and never pushes.
 Failure: dirty, unmanaged, divergent, or conflicting work remains preserved; use the commit workflow before rebasing a dirty task.
 `,
-  merge: `Rebase a managed task branch onto trunk, then fast-forward trunk from the main project directory.
+  deliver: `Commit if requested, then deliver a managed task according to trusted Git configuration.
 
-Usage: orchard merge [intent] [--keep] [--json]
-       orchard merge --finalize <operation-id> [--json]
+Usage: orchard deliver [intent] [--keep] [--json]
+       orchard deliver --finalize <intent> [--json]
 
 Options:
-  --keep                     Preserve the landed task worktree and branch.
-  --finalize <operation-id>  Recycle only after the caller returned to main.
-  --json                     Emit a versioned integration or cleanup outcome.
+  --keep               Preserve a locally integrated task worktree and branch.
+  --finalize <intent>  Complete pending local-delivery cleanup by worktree name.
+  --json               Never prompt; emit a versioned outcome, including needs-commit.
 
-Safety: merge is local, rebases task commits onto synchronized trunk, advances trunk only by fast-forward, never creates merge commits, and never pushes; --keep skips return and cleanup.
-Failure: dirty, unmanaged, or occupied tasks stop unchanged; a rebase conflict or failure is automatically aborted to restore the task branch and leave trunk unchanged.
+Safety: interactive delivery shows concise status and asks before opening Git commit; unstaged or untracked work uses Git interactive staging. Local delivery uses internal fast-forward integration, while pull-request delivery rebases and runs git pr create --web --fill only when publication is fast-forward safe.
+Failure: declining commit exits unchanged; ambiguous policy, remote publication, dirty post-commit state, divergence, or rebase failure stops without force-pushing.
 `,
   recycle: `Return one clean, landed, unoccupied task worktree to the available pool.
 
@@ -230,29 +230,7 @@ export async function runOrchardCli(args, io = console) {
       : `Rebased ${outcome.worktree.branch} onto ${outcome.project.trunk}`);
     return 0;
   }
-  if (command === "merge") {
-    const finalizeOperation = readOption(args, "--finalize");
-    const outcome = finalizeOperation
-      ? await finalizeMergedTask({ cwd: process.cwd(), home: process.env.HOME, operationId: finalizeOperation })
-      : await mergeTask({
-        cwd: process.cwd(),
-        home: process.env.HOME,
-        intent: args[1]?.startsWith("--") ? undefined : args[1],
-        keep: args.includes("--keep"),
-      });
-    if (args.includes("--json")) {
-      io.log(JSON.stringify(createMachineOutcome(command, outcome)));
-    } else if (finalizeOperation) {
-      io.log(`Completed merge cleanup ${outcome.cleanup.operationId}`);
-    } else {
-      io.log(`Fast-forwarded ${outcome.project.trunk} to ${outcome.integration.tip}`);
-      if (outcome.transition.kind === "return-main") {
-        const requested = await writeManagedReturnRequest(outcome.transition);
-        if (!requested) io.log(`Return to ${outcome.transition.targetPath}, then finalize ${outcome.transition.operationId}`);
-      }
-    }
-    return 0;
-  }
+  if (command === "deliver") return runDeliverCli(args, io);
   if (command === "recycle") {
     const outcome = await recycleTask({
       cwd: process.cwd(),
@@ -333,7 +311,8 @@ export async function runOrchardCli(args, io = console) {
     return 0;
   }
   if (!COMMANDS.has(command)) {
-    io.error(`Unknown command: ${command}\nRun orchard --help for usage.`);
+    const migration = command === "merge" ? "\nUse 'orchard deliver' instead." : "";
+    io.error(`Unknown command: ${command}${migration}\nRun orchard --help for usage.`);
     return 2;
   }
   io.log(TOP_LEVEL_HELP);
@@ -348,7 +327,7 @@ async function runManagedTaskShell(outcome, releaseOwner = async () => {}) {
     await releaseOwner();
   }
   if (shellResult.returnRequest) {
-    await finalizeMergedTask({
+    await finalizeLocalDelivery({
       cwd: outcome.project.root,
       home: process.env.HOME,
       operationId: shellResult.returnRequest.operationId,

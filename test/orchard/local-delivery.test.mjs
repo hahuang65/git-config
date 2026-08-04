@@ -40,7 +40,7 @@ async function runOrchard(cwd, home, args, extraEnvironment = {}) {
   return { stdout, stderr, exitCode };
 }
 
-async function createTask(home, repository, intent = "Mergeable") {
+async function createTask(home, repository, intent = "Deliverable") {
   const created = await runOrchard(repository, home, ["new", intent, "--offline", "--json"]);
   assert.equal(created.exitCode, 0, created.stderr);
   const task = JSON.parse(created.stdout).worktree;
@@ -50,22 +50,22 @@ async function createTask(home, repository, intent = "Mergeable") {
   return task;
 }
 
-test("merge --keep fast-forwards trunk exactly to the feature tip", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+test("local delivery --keep fast-forwards trunk exactly to the feature tip", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const task = await createTask(home, repository);
   const featureTip = git(task.path, ["rev-parse", "HEAD"]);
 
-  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
+  const output = await runOrchard(task.path, home, ["deliver", "--keep", "--json"]);
 
   assert.equal(output.exitCode, 0, output.stderr);
-  const merged = JSON.parse(output.stdout);
-  assert.equal(merged.protocolVersion, 1);
-  assert.equal(merged.command, "merge");
-  assert.equal(merged.integration.status, "fast-forwarded");
-  assert.equal(merged.integration.strategy, "rebase");
-  assert.equal(merged.integration.tip, featureTip);
-  assert.equal(merged.cleanup.requested, false);
+  const delivered = JSON.parse(output.stdout);
+  assert.equal(delivered.protocolVersion, 1);
+  assert.equal(delivered.command, "deliver");
+  assert.equal(delivered.integration.status, "fast-forwarded");
+  assert.equal(delivered.integration.strategy, "rebase");
+  assert.equal(delivered.integration.tip, featureTip);
+  assert.equal(delivered.cleanup.requested, false);
   assert.equal(git(repository, ["rev-parse", "main"]), featureTip);
   assert.equal(git(repository, ["rev-list", "--merges", "main"]).trim(), "");
   assert.equal(git(task.path, ["branch", "--show-current"]), task.branch);
@@ -75,7 +75,7 @@ test("merge --keep fast-forwards trunk exactly to the feature tip", async () => 
 });
 
 test("divergence rebases the task before fast-forwarding trunk", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const task = await createTask(home, repository, "Diverged");
   const originalFeatureTip = git(task.path, ["rev-parse", "HEAD"]);
@@ -84,7 +84,7 @@ test("divergence rebases the task before fast-forwarding trunk", async () => {
   git(repository, ["-c", "user.name=Orchard Test", "-c", "user.email=test@example.com", "commit", "-m", "trunk change"]);
   const originalTrunkTip = git(repository, ["rev-parse", "HEAD"]);
 
-  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
+  const output = await runOrchard(task.path, home, ["deliver", "--keep", "--json"]);
 
   assert.equal(output.exitCode, 0, output.stderr);
   const rebasedFeatureTip = git(task.path, ["rev-parse", "HEAD"]);
@@ -97,7 +97,7 @@ test("divergence rebases the task before fast-forwarding trunk", async () => {
 });
 
 test("a rebase conflict restores the task branch and leaves trunk unchanged", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const task = await createTask(home, repository, "Conflicted Rebase");
   await writeFile(path.join(task.path, "README.md"), "task change\n");
@@ -109,7 +109,7 @@ test("a rebase conflict restores the task branch and leaves trunk unchanged", as
   git(repository, ["-c", "user.name=Orchard Test", "-c", "user.email=test@example.com", "commit", "-m", "trunk conflict"]);
   const originalTrunkTip = git(repository, ["rev-parse", "HEAD"]);
 
-  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
+  const output = await runOrchard(task.path, home, ["deliver", "--keep", "--json"]);
 
   assert.equal(output.exitCode, 1);
   assert.match(output.stderr, /rebase.*conflict/i);
@@ -121,13 +121,13 @@ test("a rebase conflict restores the task branch and leaves trunk unchanged", as
 });
 
 test("dirty main project state stops before integration", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const task = await createTask(home, repository, "Dirty Main");
   const originalTrunk = git(repository, ["rev-parse", "main"]);
   await writeFile(path.join(repository, "local.txt"), "do not touch\n");
 
-  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
+  const output = await runOrchard(task.path, home, ["deliver", "--keep", "--json"]);
 
   assert.equal(output.exitCode, 1);
   assert.match(output.stderr, /main project directory must be clean/);
@@ -135,8 +135,8 @@ test("dirty main project state stops before integration", async () => {
   assert.equal(await readFile(path.join(repository, "local.txt"), "utf8"), "do not touch\n");
 });
 
-test("merge never pushes the fast-forwarded trunk", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+test("local delivery never pushes the fast-forwarded trunk", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const origin = path.join(home, "origin.git");
   git(home, ["init", "--bare", "--initial-branch=main", origin]);
@@ -145,21 +145,21 @@ test("merge never pushes the fast-forwarded trunk", async () => {
   const remoteTip = git(repository, ["rev-parse", "origin/main"]);
   const task = await createTask(home, repository, "Local Only");
 
-  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
+  const output = await runOrchard(task.path, home, ["deliver", "--keep", "--json"]);
 
   assert.equal(output.exitCode, 0, output.stderr);
   assert.notEqual(git(repository, ["rev-parse", "main"]), remoteTip);
   assert.equal(git(origin, ["rev-parse", "main"]), remoteTip);
 });
 
-test("merge refuses when trunk is not checked out in the main project directory", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+test("local delivery refuses when trunk is not checked out in the main project directory", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const task = await createTask(home, repository, "Wrong Checkout");
   const trunkTip = git(repository, ["rev-parse", "main"]);
   git(repository, ["switch", "-c", "maintenance"]);
 
-  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
+  const output = await runOrchard(task.path, home, ["deliver", "--keep", "--json"]);
 
   assert.equal(output.exitCode, 1);
   assert.match(output.stderr, /must have trunk 'main' checked out/);
@@ -167,8 +167,8 @@ test("merge refuses when trunk is not checked out in the main project directory"
   assert.equal(git(repository, ["branch", "--show-current"]), "maintenance");
 });
 
-test("merge fast-forwards a behind trunk before rebasing the task", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+test("local delivery fast-forwards a behind trunk before rebasing the task", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const origin = path.join(home, "origin.git");
   git(home, ["init", "--bare", "--initial-branch=main", origin]);
@@ -183,15 +183,15 @@ test("merge fast-forwards a behind trunk before rebasing the task", async () => 
   git(updater, ["push"]);
   const remoteTip = git(updater, ["rev-parse", "HEAD"]);
 
-  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
+  const output = await runOrchard(task.path, home, ["deliver", "--keep", "--json"]);
 
   assert.equal(output.exitCode, 0, output.stderr);
   assert.equal(git(task.path, ["rev-parse", "HEAD^"]), remoteTip);
   assert.equal(git(repository, ["rev-parse", "main"]), git(task.path, ["rev-parse", "HEAD"]));
 });
 
-test("merge accepts local trunk commits ahead of its upstream", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+test("local delivery accepts local trunk commits ahead of its upstream", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const origin = path.join(home, "origin.git");
   git(home, ["init", "--bare", "--initial-branch=main", origin]);
@@ -203,15 +203,15 @@ test("merge accepts local trunk commits ahead of its upstream", async () => {
   git(repository, ["-c", "user.name=Orchard Test", "-c", "user.email=test@example.com", "commit", "-m", "local main"]);
   const localMainTip = git(repository, ["rev-parse", "HEAD"]);
 
-  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
+  const output = await runOrchard(task.path, home, ["deliver", "--keep", "--json"]);
 
   assert.equal(output.exitCode, 0, output.stderr);
   assert.equal(git(task.path, ["rev-parse", "HEAD^"]), localMainTip);
   assert.equal(git(repository, ["rev-parse", "main"]), git(task.path, ["rev-parse", "HEAD"]));
 });
 
-test("merge refuses when local trunk and its upstream have diverged", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+test("local delivery refuses when local trunk and its upstream have diverged", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const origin = path.join(home, "origin.git");
   git(home, ["init", "--bare", "--initial-branch=main", origin]);
@@ -229,15 +229,15 @@ test("merge refuses when local trunk and its upstream have diverged", async () =
   git(updater, ["-c", "user.name=Orchard Test", "-c", "user.email=test@example.com", "commit", "-m", "remote update"]);
   git(updater, ["push"]);
 
-  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"]);
+  const output = await runOrchard(task.path, home, ["deliver", "--keep", "--json"]);
 
   assert.equal(output.exitCode, 1);
   assert.match(output.stderr, /diverged from 'origin\/main'/);
   assert.equal(git(repository, ["rev-parse", "main"]), localMainTip);
 });
 
-test("merge refuses divergence before invoking a rebase-capable sync alias", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+test("local delivery refuses divergence before invoking a rebase-capable sync alias", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const origin = path.join(home, "origin.git");
   git(home, ["init", "--bare", "--initial-branch=main", origin]);
@@ -258,7 +258,7 @@ test("merge refuses divergence before invoking a rebase-capable sync alias", asy
   const marker = path.join(home, "sync-alias-ran");
   git(home, ["config", "--file", globalConfig, "alias.sync", "!f() { printf invoked > \"$ORCHARD_SYNC_MARKER\"; git pull --rebase --autostash; }; f"]);
 
-  const output = await runOrchard(task.path, home, ["merge", "--keep", "--json"], {
+  const output = await runOrchard(task.path, home, ["deliver", "--keep", "--json"], {
     GIT_CONFIG_GLOBAL: globalConfig,
     ORCHARD_SYNC_MARKER: marker,
   });
@@ -269,23 +269,23 @@ test("merge refuses divergence before invoking a rebase-capable sync alias", asy
   await assert.rejects(access(marker), { code: "ENOENT" });
 });
 
-test("default merge finalizes recycling only after the caller returns to main", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+test("default local delivery finalizes recycling only after the caller returns to main", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const task = await createTask(home, repository, "Return Then Recycle");
 
-  const mergedOutput = await runOrchard(task.path, home, ["merge", "--json"]);
+  const deliveredOutput = await runOrchard(task.path, home, ["deliver", "--json"]);
 
-  assert.equal(mergedOutput.exitCode, 0, mergedOutput.stderr);
-  const merged = JSON.parse(mergedOutput.stdout);
-  assert.equal(merged.cleanup.requested, true);
-  assert.equal(merged.transition.kind, "return-main");
+  assert.equal(deliveredOutput.exitCode, 0, deliveredOutput.stderr);
+  const delivered = JSON.parse(deliveredOutput.stdout);
+  assert.equal(delivered.cleanup.requested, true);
+  assert.equal(delivered.transition.kind, "return-main");
   await access(task.path);
   let state = JSON.parse(await readFile(path.join(home, ".orchard", "alpha", "state.json"), "utf8"));
-  assert.equal(state.slots[0].pendingCleanup.operationId, merged.transition.operationId);
+  assert.equal(state.slots[0].pendingCleanup.operationId, delivered.transition.operationId);
   assert.equal(state.slots[0].lifecycle, "task");
 
-  const finalizedOutput = await runOrchard(repository, home, ["merge", "--finalize", merged.transition.operationId, "--json"]);
+  const finalizedOutput = await runOrchard(repository, home, ["deliver", "--finalize", task.intent, "--json"]);
 
   assert.equal(finalizedOutput.exitCode, 0, finalizedOutput.stderr);
   const finalized = JSON.parse(finalizedOutput.stdout);
@@ -297,15 +297,15 @@ test("default merge finalizes recycling only after the caller returns to main", 
 });
 
 test("failed return preserves the landed task and pending cleanup", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const task = await createTask(home, repository, "Return Failure");
   const featureTip = git(task.path, ["rev-parse", "HEAD"]);
-  const mergedOutput = await runOrchard(task.path, home, ["merge", "--json"]);
-  assert.equal(mergedOutput.exitCode, 0, mergedOutput.stderr);
-  const operationId = JSON.parse(mergedOutput.stdout).transition.operationId;
+  const deliveredOutput = await runOrchard(task.path, home, ["deliver", "--json"]);
+  assert.equal(deliveredOutput.exitCode, 0, deliveredOutput.stderr);
+  const operationId = JSON.parse(deliveredOutput.stdout).transition.operationId;
 
-  const failed = await runOrchard(task.path, home, ["merge", "--finalize", operationId, "--json"]);
+  const failed = await runOrchard(task.path, home, ["deliver", "--finalize", task.intent, "--json"]);
 
   assert.equal(failed.exitCode, 1);
   assert.match(failed.stderr, /requires the caller to return to the main project directory/);
@@ -317,17 +317,17 @@ test("failed return preserves the landed task and pending cleanup", async () => 
 });
 
 test("cleanup failure never rolls trunk backward or removes an occupied task", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const task = await createTask(home, repository, "Occupied Cleanup");
   const entered = await runOrchard(repository, home, ["enter", "occupied-cleanup", "--owner-pid", String(process.pid), "--json"]);
   assert.equal(entered.exitCode, 0, entered.stderr);
   const featureTip = git(task.path, ["rev-parse", "HEAD"]);
-  const mergedOutput = await runOrchard(task.path, home, ["merge", "--json"]);
-  assert.equal(mergedOutput.exitCode, 0, mergedOutput.stderr);
-  const operationId = JSON.parse(mergedOutput.stdout).transition.operationId;
+  const deliveredOutput = await runOrchard(task.path, home, ["deliver", "--json"]);
+  assert.equal(deliveredOutput.exitCode, 0, deliveredOutput.stderr);
+  const operationId = JSON.parse(deliveredOutput.stdout).transition.operationId;
 
-  const failed = await runOrchard(repository, home, ["merge", "--finalize", operationId, "--json"]);
+  const failed = await runOrchard(repository, home, ["deliver", "--finalize", task.intent, "--json"]);
 
   assert.equal(failed.exitCode, 1);
   assert.match(failed.stderr, /is occupied/);
@@ -336,17 +336,17 @@ test("cleanup failure never rolls trunk backward or removes an occupied task", a
   await access(task.path);
 });
 
-test("merge cleanup finalization is idempotent", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+test("delivery cleanup finalization is idempotent", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const task = await createTask(home, repository, "Idempotent Cleanup");
-  const mergedOutput = await runOrchard(task.path, home, ["merge", "--json"]);
-  assert.equal(mergedOutput.exitCode, 0, mergedOutput.stderr);
-  const operationId = JSON.parse(mergedOutput.stdout).transition.operationId;
-  const first = await runOrchard(repository, home, ["merge", "--finalize", operationId, "--json"]);
+  const deliveredOutput = await runOrchard(task.path, home, ["deliver", "--json"]);
+  assert.equal(deliveredOutput.exitCode, 0, deliveredOutput.stderr);
+  const operationId = JSON.parse(deliveredOutput.stdout).transition.operationId;
+  const first = await runOrchard(repository, home, ["deliver", "--finalize-operation", operationId, "--json"]);
   assert.equal(first.exitCode, 0, first.stderr);
 
-  const second = await runOrchard(repository, home, ["merge", "--finalize", operationId, "--json"]);
+  const second = await runOrchard(repository, home, ["deliver", "--finalize-operation", operationId, "--json"]);
 
   assert.equal(second.exitCode, 0, second.stderr);
   assert.equal(JSON.parse(second.stdout).cleanup.status, "completed");
@@ -356,11 +356,11 @@ test("merge cleanup finalization is idempotent", async () => {
   assert.equal(state.slots[0].completedCleanupOperationId, operationId);
 });
 
-test("managed shell merge returns before outer cleanup recycles the task", async () => {
-  const home = await mkdtemp(path.join(tmpdir(), "orchard-merge-"));
+test("managed shell delivery returns before outer cleanup recycles the task", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-local-delivery-"));
   const repository = await createRepository(home);
   const shell = path.join(home, "managed-shell");
-  await writeFile(shell, "#!/bin/sh\nprintf 'terminal feature\\n' > terminal.txt\ngit add terminal.txt\ngit -c user.name='Orchard Test' -c user.email=test@example.com commit -m 'terminal feature' >/dev/null\n\"$ORCHARD_EXECUTABLE\" merge\n");
+  await writeFile(shell, "#!/bin/sh\nprintf 'terminal feature\\n' > terminal.txt\ngit add terminal.txt\ngit -c user.name='Orchard Test' -c user.email=test@example.com commit -m 'terminal feature' >/dev/null\n\"$ORCHARD_EXECUTABLE\" deliver\n");
   await chmod(shell, 0o700);
 
   const output = await runOrchard(repository, home, ["new", "Terminal Return", "--offline"], {

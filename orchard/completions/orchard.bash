@@ -1,7 +1,7 @@
 _orchard_completion() {
   COMPREPLY=()
 
-  if ((COMP_CWORD > 2)); then
+  if ((COMP_CWORD > 3)); then
     return
   fi
 
@@ -9,6 +9,10 @@ _orchard_completion() {
   local command_name=""
   if ((COMP_CWORD == 2)); then
     command_name="${COMP_WORDS[1]}"
+  elif ((COMP_CWORD == 3)) && [[ "${COMP_WORDS[1]}" == "deliver" && "${COMP_WORDS[2]}" == "--finalize" ]]; then
+    command_name="deliver"
+  elif ((COMP_CWORD != 1)); then
+    return
   fi
 
   local candidate
