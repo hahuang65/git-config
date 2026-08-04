@@ -41,5 +41,16 @@ async function readProjectState(root, groupName) {
 
 export function formatOrchardStatus(status) {
   if (status.projects.length === 0) return "No Orchard projects.";
-  return status.projects.map((project) => project.name).join("\n");
+  return status.projects.map(formatProjectStatus).join("\n");
+}
+
+function formatProjectStatus(project) {
+  const activeWorktrees = project.slots.filter((slot) => slot.lifecycle === "task");
+  const heading = `${project.name} (${project.root})`;
+  if (activeWorktrees.length === 0) return `${heading}\n  No active worktrees.`;
+  return [heading, ...activeWorktrees.map(formatActiveWorktree)].join("\n");
+}
+
+function formatActiveWorktree(worktree) {
+  return `  ${worktree.intent} [${worktree.branch}]\n    ${worktree.path}`;
 }

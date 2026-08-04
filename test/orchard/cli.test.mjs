@@ -15,12 +15,12 @@ function git(cwd, args) {
   return output.stdout.trim();
 }
 
-async function writeProjectState(home, name, root) {
+async function writeProjectState(home, name, root, slots = []) {
   const group = path.join(home, ".orchard", name);
   await mkdir(group, { recursive: true });
   await writeFile(
     path.join(group, "state.json"),
-    JSON.stringify({ version: 1, project: { name, root }, slots: [] }),
+    JSON.stringify({ version: 1, project: { name, root }, slots }),
   );
 }
 
@@ -107,6 +107,33 @@ test("bare invocation reports that an isolated home has no Orchard projects", as
 
   assert.deepEqual(output, {
     stdout: "No Orchard projects.\n",
+    stderr: "",
+    exitCode: 0,
+  });
+});
+
+test("status shows each project and its active worktrees", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-home-"));
+  const alphaRoot = path.join(home, "projects", "alpha");
+  const betaRoot = path.join(home, "projects", "beta");
+  const activePath = path.join(home, ".orchard", "alpha", "active-task");
+  await writeProjectState(home, "alpha", alphaRoot, [
+    { lifecycle: "available", path: path.join(home, ".orchard", "alpha", "pool", "slot-1") },
+    { lifecycle: "task", intent: "active-task", branch: "hh/active-task", path: activePath },
+  ]);
+  await writeProjectState(home, "beta", betaRoot);
+
+  const output = await runOrchard(["status"], { cwd: home, home });
+
+  assert.deepEqual(output, {
+    stdout: [
+      `alpha (${alphaRoot})`,
+      "  active-task [hh/active-task]",
+      `    ${activePath}`,
+      `beta (${betaRoot})`,
+      "  No active worktrees.",
+      "",
+    ].join("\n"),
     stderr: "",
     exitCode: 0,
   });
