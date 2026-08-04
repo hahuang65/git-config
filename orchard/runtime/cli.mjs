@@ -9,7 +9,7 @@ import { recoverAllProjects } from "./recovery.mjs";
 import { recycleTask } from "./recycle-service.mjs";
 import { acquireTask } from "./service.mjs";
 import { openManagedShell } from "./shell.mjs";
-import { formatOrchardStatus, readOrchardStatus } from "./status.mjs";
+import { formatOrchardStatus, readOrchardStatus, shouldUseColor } from "./status.mjs";
 
 const COMMANDS = new Set(["new", "convert", "status", "enter", "merge", "recycle", "prune", "destroy"]);
 
@@ -159,8 +159,8 @@ export async function runOrchardCli(args, io = console) {
     if (args.includes("--refresh")) await recoverAllProjects({ home: process.env.HOME });
     const status = await readOrchardStatus({ all: args.includes("--all") });
     const output = args.includes("--json")
-      ? JSON.stringify(createMachineOutcome(command, status))
-      : formatOrchardStatus(status);
+      ? JSON.stringify(createMachineOutcome(command, { projects: status.projects }))
+      : formatOrchardStatus(status, { color: shouldUseColor() });
     io.log(output);
     return 0;
   }

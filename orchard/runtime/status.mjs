@@ -3,6 +3,13 @@ import path from "node:path";
 
 import { findMainProjectDirectory } from "./git.mjs";
 
+const STATUS_SCOPE = Object.freeze({ GLOBAL: "global", PROJECT: "project" });
+const ANSI = Object.freeze({
+  reset: "\u001b[0m",
+  projectName: "\u001b[1;36m",
+  worktreeName: "\u001b[1;32m",
+});
+
 export async function readOrchardStatus({ home = process.env.HOME, cwd = process.cwd(), all = false } = {}) {
   if (!home) throw new Error("HOME is required");
   const groups = await readProjectGroups(path.join(home, ".orchard"));
@@ -10,7 +17,7 @@ export async function readOrchardStatus({ home = process.env.HOME, cwd = process
   const projects = projectRoot
     ? groups.filter((group) => group.root === projectRoot)
     : groups;
-  return { projects };
+  return { projects, scope: projectRoot ? STATUS_SCOPE.PROJECT : STATUS_SCOPE.GLOBAL };
 }
 
 async function readProjectGroups(root) {
@@ -39,18 +46,41 @@ async function readProjectState(root, groupName) {
   }
 }
 
-export function formatOrchardStatus(status) {
+export function formatOrchardStatus(status, { color = false } = {}) {
+  if (status.scope === STATUS_SCOPE.PROJECT) return formatScopedStatus(status.projects, color);
   if (status.projects.length === 0) return "No Orchard projects.";
-  return status.projects.map(formatProjectStatus).join("\n");
+  return status.projects.map((project) => formatProjectStatus(project, color)).join("\n");
 }
 
-function formatProjectStatus(project) {
-  const activeWorktrees = project.slots.filter((slot) => slot.lifecycle === "task");
-  const heading = `${project.name} (${project.root})`;
-  if (activeWorktrees.length === 0) return `${heading}\n  No active worktrees.`;
-  return [heading, ...activeWorktrees.map(formatActiveWorktree)].join("\n");
+export function shouldUseColor(stream = process.stdout, environment = process.env) {
+  if (Object.hasOwn(environment, "NO_COLOR")) return false;
+  if (Object.hasOwn(environment, "FORCE_COLOR")) return environment.FORCE_COLOR !== "0";
+  return Boolean(stream.isTTY);
 }
 
-function formatActiveWorktree(worktree) {
-  return `  ${worktree.intent} [${worktree.branch}]\n    ${worktree.path}`;
+function formatScopedStatus(projects, color) {
+  const activeWorktrees = projects.flatMap(findActiveWorktrees);
+  if (activeWorktrees.length === 0) return "No active worktrees.";
+  return activeWorktrees.map((worktree) => formatActiveWorktree(worktree, color)).join("\n");
+}
+
+function formatProjectStatus(project, color) {
+  const heading = applyColor(project.name, ANSI.projectName, color);
+  const activeWorktrees = findActiveWorktrees(project);
+  if (activeWorktrees.length === 0) return `${heading}\n\tNo active worktrees.`;
+  const worktreeLines = activeWorktrees.map((worktree) => `\t${formatActiveWorktree(worktree, color)}`);
+  return [heading, ...worktreeLines].join("\n");
+}
+
+function findActiveWorktrees(project) {
+  return project.slots.filter((slot) => slot.lifecycle === "task");
+}
+
+function formatActiveWorktree(worktree, color) {
+  const name = applyColor(worktree.intent, ANSI.worktreeName, color);
+  return `${name} (${worktree.path}) [${worktree.branch}]`;
+}
+
+function applyColor(value, ansiColor, enabled) {
+  return enabled ? `${ansiColor}${value}${ANSI.reset}` : value;
 }

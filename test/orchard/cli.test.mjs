@@ -27,7 +27,7 @@ async function writeProjectState(home, name, root, slots = []) {
 async function runOrchard(args = [], options = {}) {
   const child = spawn("node", [CLI_PATH, ...args], {
     cwd: options.cwd,
-    env: { ...process.env, ...(options.home ? { HOME: options.home } : {}) },
+    env: { ...process.env, ...(options.home ? { HOME: options.home } : {}), ...options.env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stdout = "";
@@ -127,13 +127,51 @@ test("status shows each project and its active worktrees", async () => {
 
   assert.deepEqual(output, {
     stdout: [
-      `alpha (${alphaRoot})`,
-      "  active-task [hh/active-task]",
-      `    ${activePath}`,
-      `beta (${betaRoot})`,
-      "  No active worktrees.",
+      "alpha",
+      `\tactive-task (${activePath}) [hh/active-task]`,
+      "beta",
+      "\tNo active worktrees.",
       "",
     ].join("\n"),
+    stderr: "",
+    exitCode: 0,
+  });
+});
+
+test("status inside a repository lists only active worktrees without a project heading", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-home-"));
+  const repository = path.join(home, "projects", "alpha");
+  const activePath = path.join(home, ".orchard", "alpha", "active-task");
+  await mkdir(repository, { recursive: true });
+  git(repository, ["init", "--initial-branch=main"]);
+  await writeProjectState(home, "alpha", repository, [
+    { lifecycle: "task", intent: "active-task", branch: "hh/active-task", path: activePath },
+  ]);
+  await writeProjectState(home, "beta", path.join(home, "projects", "beta"), [
+    { lifecycle: "task", intent: "other-task", branch: "hh/other-task", path: "/other-task" },
+  ]);
+
+  const output = await runOrchard(["status"], { cwd: repository, home });
+
+  assert.deepEqual(output, {
+    stdout: `active-task (${activePath}) [hh/active-task]\n`,
+    stderr: "",
+    exitCode: 0,
+  });
+});
+
+test("status colors project and worktree names when color is enabled", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-home-"));
+  const alphaRoot = path.join(home, "projects", "alpha");
+  const activePath = path.join(home, ".orchard", "alpha", "active-task");
+  await writeProjectState(home, "alpha", alphaRoot, [
+    { lifecycle: "task", intent: "active-task", branch: "hh/active-task", path: activePath },
+  ]);
+
+  const output = await runOrchard(["status"], { cwd: home, home, env: { FORCE_COLOR: "1" } });
+
+  assert.deepEqual(output, {
+    stdout: `\u001b[1;36malpha\u001b[0m\n\t\u001b[1;32mactive-task\u001b[0m (${activePath}) [hh/active-task]\n`,
     stderr: "",
     exitCode: 0,
   });
@@ -167,7 +205,7 @@ test("status inside a repository shows only the registered project group", async
   assert.deepEqual(JSON.parse(output.stdout).projects.map((project) => project.name), ["alpha"]);
 });
 
-test("status inside a linked worktree resolves its registered main project", async () => {
+test("status inside a linked worktree omits its project heading", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "orchard-home-"));
   const repository = path.join(home, "projects", "alpha");
   const linked = path.join(home, "linked", "feature");
@@ -178,12 +216,17 @@ test("status inside a linked worktree resolves its registered main project", asy
   git(repository, ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "initial"]);
   await mkdir(path.dirname(linked), { recursive: true });
   git(repository, ["worktree", "add", "--detach", linked, "HEAD"]);
-  await writeProjectState(home, "alpha", repository);
+  await writeProjectState(home, "alpha", repository, [
+    { lifecycle: "task", intent: "feature", branch: "hh/feature", path: linked },
+  ]);
 
-  const output = await runOrchard(["status", "--json"], { cwd: linked, home });
+  const output = await runOrchard(["status"], { cwd: linked, home });
 
-  assert.equal(output.exitCode, 0);
-  assert.deepEqual(JSON.parse(output.stdout).projects.map((project) => project.name), ["alpha"]);
+  assert.deepEqual(output, {
+    stdout: `feature (${linked}) [hh/feature]\n`,
+    stderr: "",
+    exitCode: 0,
+  });
 });
 
 test("status --all overrides repository scoping", async () => {
