@@ -107,18 +107,18 @@ Options:
 Safety: rebase requires clean task and trunk worktrees, fast-forwards a behind trunk, accepts a local trunk ahead of upstream, refuses divergence, automatically aborts conflicts, and never pushes.
 Failure: dirty, unmanaged, divergent, or conflicting work remains preserved; use the commit workflow before rebasing a dirty task.
 `,
-  deliver: `Commit if requested, then deliver a managed task or current ordinary branch according to trusted Git configuration.
+  deliver: `Commit if requested, then deliver a managed task according to trusted Git configuration.
 
 Usage: orchard deliver [intent] [--keep] [--json]
        orchard deliver --finalize <intent> [--json]
 
 Options:
-  --keep               Preserve the delivered branch and any managed task worktree.
+  --keep               Preserve a locally integrated task worktree and branch.
   --finalize <intent>  Complete pending local-delivery cleanup by worktree name.
   --json               Never prompt; emit a versioned outcome, including needs-commit.
 
-Safety: interactive delivery shows concise status and asks before opening Git commit; unstaged or untracked work uses Git interactive staging. Local delivery rebases and fast-forwards trunk; an ordinary branch returns on trunk and is removed unless --keep is set. Pull-request delivery rebases and runs git pr create --web --fill only when publication is fast-forward safe.
-Failure: declining commit exits unchanged; ambiguous policy, remote publication, dirty post-commit state, divergence, unmanaged linked-worktree use, or rebase failure stops without force-pushing.
+Safety: interactive delivery shows concise status and asks before opening Git commit; unstaged or untracked work uses Git interactive staging. Local delivery uses internal fast-forward integration, while pull-request delivery rebases and runs git pr create --web --fill only when publication is fast-forward safe.
+Failure: declining commit exits unchanged; ambiguous policy, remote publication, dirty post-commit state, divergence, or rebase failure stops without force-pushing.
 `,
   recycle: `Return one clean, landed, unoccupied task worktree to the available pool.
 
