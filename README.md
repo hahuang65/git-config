@@ -18,6 +18,8 @@ It registers Bash completion for Orchard commands, active worktree intents, and 
 Orchard requires Node.js 22 or newer and supports macOS and Linux.
 Run `orchard --help` to inspect the available lifecycle commands.
 `orchard rebase [worktree]` synchronizes tracked trunk and rebases a clean task branch without delivering it.
+`orchard repair [worktree]` restores Orchard metadata only for a quarantined task whose exact path and assigned branch binding are proven, leaving Git state unchanged.
+`orchard status --refresh` records durable quarantine evidence for conflicting, stale, duplicate, or misplaced registrations and keeps those slots out of normal task commands.
 `orchard deliver [worktree]` shows dirty status, offers an interactive Git commit, then applies the trusted user-level delivery strategy.
 Local delivery rebases and fast-forwards trunk without pushing; pull-request delivery rebases and opens exactly `git pr create --web --fill` only when published history remains fast-forward safe.
 Both commands infer the current task inside its worktree or accept a worktree intent from the primary trunk checkout.

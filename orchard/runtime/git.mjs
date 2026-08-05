@@ -56,10 +56,10 @@ export async function findMainProjectDirectory(cwd) {
     // Ordinary repositories do not define core.worktree.
   }
   try {
-    const { stdout } = await runGit(cwd, ["worktree", "list", "--porcelain"]);
-    const firstLine = stdout.split("\n", 1)[0];
-    if (!firstLine.startsWith("worktree ")) return undefined;
-    return await realpath(firstLine.slice("worktree ".length));
+    const { stdout } = await runGit(cwd, ["worktree", "list", "--porcelain", "-z"]);
+    const firstField = stdout.split("\0", 1)[0];
+    if (!firstField.startsWith("worktree ")) return undefined;
+    return await realpath(firstField.slice("worktree ".length));
   } catch {
     return undefined;
   }

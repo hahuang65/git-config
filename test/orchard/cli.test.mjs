@@ -44,7 +44,7 @@ test("top-level help documents every command and compatibility boundary", async 
   assert.equal(output.exitCode, 0);
   assert.equal(output.stderr, "");
   assert.match(output.stdout, /Usage: orchard \[command\]/);
-  for (const command of ["new", "convert", "status", "enter", "rebase", "deliver", "recycle", "prune", "destroy"]) {
+  for (const command of ["new", "convert", "status", "enter", "repair", "rebase", "deliver", "recycle", "prune", "destroy"]) {
     assert.match(output.stdout, new RegExp(`\\b${command}\\b`));
   }
   assert.match(output.stdout, /Node\.js 22\+/);
@@ -72,7 +72,7 @@ test("completion suggests top-level commands", async () => {
   const output = await runOrchard(["__complete"]);
 
   assert.deepEqual(output, {
-    stdout: "new\nconvert\nstatus\nenter\nrebase\ndeliver\nrecycle\nprune\ndestroy\n",
+    stdout: "new\nconvert\nstatus\nenter\nrepair\nrebase\ndeliver\nrecycle\nprune\ndestroy\n",
     stderr: "",
     exitCode: 0,
   });
@@ -142,6 +142,7 @@ test("every subcommand help is comprehensive and never mutates Orchard state", a
     convert: ["<intent>", "--print-path", "--json"],
     status: ["--all", "--refresh", "--json"],
     enter: ["<intent>", "--share", "--owner-pid", "--release-owner", "--print-path", "--json"],
+    repair: ["--json"],
     rebase: ["--json"],
     deliver: ["--keep", "--finalize", "--json"],
     recycle: ["<intent>", "--keep-branch", "--json"],
@@ -198,6 +199,60 @@ test("status shows each project and its active worktrees", async () => {
   });
 });
 
+test("status shows quarantined worktrees with branch-binding evidence", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-home-"));
+  const root = path.join(home, "projects", "alpha");
+  const taskPath = path.join(home, ".orchard", "alpha", "broken");
+  await writeProjectState(home, "alpha", root, [{
+    lifecycle: "quarantined",
+    intent: "broken",
+    branch: "hh/broken",
+    path: taskPath,
+    quarantine: {
+      code: "branch-mismatch",
+      reason: "Registered branch 'hh/broken' conflicts with Git branch 'accidental-branch'",
+      expectedBranch: "hh/broken",
+      observedBranch: "accidental-branch",
+      observedCommit: "abc123",
+      detectedAt: "2026-08-05T00:00:00.000Z",
+    },
+  }]);
+
+  const output = await runOrchard(["status"], { cwd: home, home });
+
+  assert.deepEqual(output, {
+    stdout: [
+      "alpha",
+      `\tbroken (${taskPath}) [expected: hh/broken; observed: accidental-branch] QUARANTINED: Registered branch 'hh/broken' conflicts with Git branch 'accidental-branch' (2026-08-05T00:00:00.000Z)`,
+      "",
+    ].join("\n"),
+    stderr: "",
+    exitCode: 0,
+  });
+});
+
+test("status does not invent detached HEAD for non-branch quarantine evidence", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-home-"));
+  const root = path.join(home, "projects", "alpha");
+  const taskPath = path.join(home, ".orchard", "alpha", "missing");
+  await writeProjectState(home, "alpha", root, [{
+    lifecycle: "quarantined",
+    intent: "missing",
+    branch: "hh/missing",
+    path: taskPath,
+    quarantine: {
+      code: "missing-worktree-metadata",
+      reason: "Registered path is missing from Git worktree metadata",
+      detectedAt: "2026-08-05T00:00:00.000Z",
+    },
+  }]);
+
+  const output = await runOrchard(["status"], { cwd: home, home });
+
+  assert.match(output.stdout, /QUARANTINED: Registered path is missing/);
+  assert.doesNotMatch(output.stdout, /observed: detached HEAD/);
+});
+
 test("status inside a repository lists only active worktrees without a project heading", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "orchard-home-"));
   const repository = path.join(home, "projects", "alpha");
@@ -235,6 +290,28 @@ test("status colors project and worktree names when color is enabled", async () 
     stderr: "",
     exitCode: 0,
   });
+});
+
+test("status colors quarantined worktree names distinctly", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-home-"));
+  const root = path.join(home, "projects", "alpha");
+  const taskPath = path.join(home, ".orchard", "alpha", "broken");
+  await writeProjectState(home, "alpha", root, [{
+    lifecycle: "quarantined",
+    intent: "broken",
+    branch: "hh/broken",
+    path: taskPath,
+    quarantine: {
+      reason: "Branch mismatch",
+      expectedBranch: "hh/broken",
+      observedBranch: "accidental",
+      detectedAt: "2026-08-05T00:00:00.000Z",
+    },
+  }]);
+
+  const output = await runOrchard(["status"], { cwd: home, home, env: { FORCE_COLOR: "1" } });
+
+  assert.match(output.stdout, /\u001b\[1;33mbroken\u001b\[0m.*QUARANTINED/);
 });
 
 test("status emits a versioned machine-readable outcome", async () => {

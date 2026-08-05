@@ -8,6 +8,7 @@ const ANSI = Object.freeze({
   reset: "\u001b[0m",
   projectName: "\u001b[1;36m",
   worktreeName: "\u001b[1;32m",
+  quarantineName: "\u001b[1;33m",
 });
 
 export async function readOrchardStatus({ home = process.env.HOME, cwd = process.cwd(), all = false } = {}) {
@@ -73,12 +74,31 @@ function formatProjectStatus(project, color) {
 }
 
 function findActiveWorktrees(project) {
-  return project.slots.filter((slot) => slot.lifecycle === "task");
+  return project.slots.filter((slot) => ["task", "quarantined"].includes(slot.lifecycle));
 }
 
 function formatActiveWorktree(worktree, color) {
+  if (worktree.lifecycle === "quarantined") return formatQuarantinedWorktree(worktree, color);
   const name = applyColor(worktree.intent, ANSI.worktreeName, color);
   return `${name} (${worktree.path}) [${worktree.branch}]`;
+}
+
+function formatQuarantinedWorktree(worktree, color) {
+  const name = applyColor(worktree.intent ?? "unknown", ANSI.quarantineName, color);
+  const evidence = worktree.quarantine ?? {};
+  const binding = formatBindingEvidence(evidence);
+  const reason = evidence.reason ?? "Quarantine reason unavailable";
+  const detectedAt = evidence.detectedAt ? ` (${evidence.detectedAt})` : "";
+  return `${name} (${worktree.path})${binding} QUARANTINED: ${reason}${detectedAt}`;
+}
+
+function formatBindingEvidence(evidence) {
+  const hasExpected = Object.hasOwn(evidence, "expectedBranch");
+  const hasObserved = Object.hasOwn(evidence, "observedBranch");
+  if (!hasExpected && !hasObserved) return "";
+  const expected = hasExpected ? evidence.expectedBranch : "unknown";
+  const observed = evidence.observedBranch ?? "detached HEAD";
+  return ` [expected: ${expected}; observed: ${observed}]`;
 }
 
 function applyColor(value, ansiColor, enabled) {

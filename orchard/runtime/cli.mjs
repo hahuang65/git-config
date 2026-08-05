@@ -7,13 +7,14 @@ import { finalizeLocalDelivery } from "./local-delivery.mjs";
 import { createMachineOutcome } from "./protocol.mjs";
 import { pruneProject } from "./prune-service.mjs";
 import { rebaseTask } from "./rebase-service.mjs";
+import { repairTask } from "./repair-service.mjs";
 import { recoverAllProjects } from "./recovery.mjs";
 import { recycleTask } from "./recycle-service.mjs";
 import { acquireTask } from "./service.mjs";
 import { openManagedShell } from "./shell.mjs";
 import { formatOrchardStatus, readOrchardStatus, shouldUseColor } from "./status.mjs";
 
-const COMMAND_NAMES = Object.freeze(["new", "convert", "status", "enter", "rebase", "deliver", "recycle", "prune", "destroy"]);
+const COMMAND_NAMES = Object.freeze(["new", "convert", "status", "enter", "repair", "rebase", "deliver", "recycle", "prune", "destroy"]);
 const COMMANDS = new Set(COMMAND_NAMES);
 
 const TOP_LEVEL_HELP = `Orchard manages reusable, branch-bound Git worktrees.
@@ -25,6 +26,7 @@ Commands:
   convert   Convert a local task branch
   status    Show managed worktrees (default)
   enter     Enter an existing task worktree
+  repair    Restore a proven quarantined branch binding
   rebase    Synchronize trunk and rebase a task branch
   deliver   Commit if requested, then apply project delivery policy
   recycle   Return landed work to the available pool
@@ -96,6 +98,17 @@ Options:
 
 Safety: concurrent entry is refused unless --share is explicit.
 Failure: unknown tasks, invalid owners, and unsafe sharing stop without changing task lifecycle.
+`,
+  repair: `Restore one quarantined task after its registered branch binding is proven.
+
+Usage: orchard repair [intent] [--json]
+
+Options:
+  --json  Emit a versioned machine-readable outcome.
+
+Location: run from the exact quarantined worktree, or use its intent from the main project directory.
+Safety: repair changes only Orchard metadata after proving the exact path and assigned branch; dirty task files are preserved, and repair never deletes the accidental branch.
+Failure: unsupported quarantine, caller location, branch-binding evidence, multiple live owners, unresolved recovery, or an in-progress merge, rebase, cherry-pick, revert, or bisect remains quarantined without changing Git.
 `,
   rebase: `Synchronize trunk, then rebase a clean managed task branch onto it.
 
@@ -219,6 +232,17 @@ export async function runOrchardCli(args, io = console) {
       : `${outcome.applied ? "Applied" : "Preview"}: ${outcome.plan.remove.length} removable slot(s)`);
     return 0;
   }
+  if (command === "repair") {
+    const outcome = await repairTask({
+      cwd: process.cwd(),
+      home: process.env.HOME,
+      intent: args[1]?.startsWith("--") ? undefined : args[1],
+    });
+    io.log(args.includes("--json")
+      ? JSON.stringify(createMachineOutcome(command, outcome))
+      : formatRepairOutcome(outcome));
+    return 0;
+  }
   if (command === "rebase") {
     const outcome = await rebaseTask({
       cwd: process.cwd(),
@@ -333,6 +357,15 @@ async function runManagedTaskShell(outcome, releaseOwner = async () => {}) {
       operationId: shellResult.returnRequest.operationId,
     });
   }
+}
+
+function formatRepairOutcome(outcome) {
+  const { worktree, repair } = outcome;
+  const dirty = repair.dirty ? "yes" : "no";
+  const observation = repair.previouslyDetachedHead
+    ? "previously observed detached HEAD"
+    : `previously observed branch '${repair.accidentalBranch}'`;
+  return `Repaired ${worktree.intent} (${worktree.path}) [${repair.proof.assignedBranch}]; left Git unchanged (${observation}); dirty worktree: ${dirty}`;
 }
 
 function readOption(args, option) {

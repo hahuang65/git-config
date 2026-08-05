@@ -2,10 +2,13 @@ import { createHash } from "node:crypto";
 import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import { runGit } from "./git.mjs";
+import { inspectBranchBinding } from "./branch-binding-verifier.mjs";
+import { withProjectLock } from "./lock.mjs";
 import { refreshTaskOwners } from "./ownership.mjs";
 import { canonicalPath } from "./paths.mjs";
+import { createQuarantineEvidence, QUARANTINE_CODES } from "./quarantine.mjs";
 import { saveProjectState } from "./registry.mjs";
+import { readWorktreeMetadata } from "./worktree-metadata.mjs";
 
 export async function recoverAllProjects({ home }) {
   const orchardRoot = path.join(home, ".orchard");
@@ -22,6 +25,10 @@ export async function recoverAllProjects({ home }) {
 }
 
 export async function recoverProjectGroup(directory) {
+  return withProjectLock(directory, () => recoverProjectGroupUnderLock(directory));
+}
+
+async function recoverProjectGroupUnderLock(directory) {
   const statePath = path.join(directory, "state.json");
   const validState = await readValidState(statePath);
   if (validState) {
@@ -32,7 +39,7 @@ export async function recoverProjectGroup(directory) {
   }
   const candidates = await findManagedCandidates(directory);
   if (candidates.length === 0) return;
-  const metadata = parseWorktreeMetadata((await runGit(candidates[0], ["worktree", "list", "--porcelain"])).stdout);
+  const metadata = await readWorktreeMetadata(candidates[0]);
   const project = metadata[0];
   if (!project?.branch) return;
   const displayPaths = new Map(await Promise.all(candidates.map(async (candidate) => [await canonicalPath(candidate), candidate])));
@@ -54,50 +61,102 @@ async function reconcileValidState(directory, state) {
   const before = JSON.stringify(state);
   for (const slot of state.slots) refreshTaskOwners(slot);
   const candidates = await findManagedCandidates(directory);
-  const metadata = candidates.length
-    ? parseWorktreeMetadata((await runGit(candidates[0], ["worktree", "list", "--porcelain"])).stdout)
-    : [];
+  const metadata = candidates.length ? await readWorktreeMetadata(candidates[0]) : [];
   for (const slot of state.slots) {
     if (slot.lifecycle === "quarantined") continue;
     const slotPath = await canonicalPath(slot.path);
-    const actual = await findWorktreeByPath(metadata, slotPath);
-    const reason = registrationConflict(slot, actual);
-    if (reason) {
+    const pathMatches = await findWorktreesByPath(metadata, slotPath);
+    const quarantine = await registrationConflict(directory, slot, pathMatches, metadata);
+    if (quarantine) {
       slot.lifecycle = "quarantined";
-      slot.quarantine = { reason };
+      slot.quarantine = quarantine;
     }
   }
-  quarantineDuplicateRegistrations(state.slots);
+  await quarantineDuplicateRegistrations(state.slots);
   return JSON.stringify(state) !== before;
 }
 
-async function findWorktreeByPath(metadata, slotPath) {
+async function findWorktreesByPath(metadata, slotPath) {
+  const matches = [];
   for (const worktree of metadata) {
-    if (await canonicalPath(worktree.path) === slotPath) return worktree;
+    if (await canonicalPath(worktree.path) === slotPath) matches.push(worktree);
   }
-  return undefined;
+  return matches;
 }
 
-function registrationConflict(slot, actual) {
-  if (!actual) return "Registered path is missing from Git worktree metadata";
-  if (slot.lifecycle === "task" && actual.branch !== slot.branch) {
-    return `Registered branch '${slot.branch}' conflicts with Git branch '${actual.branch ?? "detached HEAD"}'`;
+async function registrationConflict(directory, slot, pathMatches, metadata) {
+  if (pathMatches.length === 0) {
+    return createQuarantineEvidence({
+      code: QUARANTINE_CODES.missingWorktreeMetadata,
+      reason: "Registered path is missing from Git worktree metadata",
+    });
+  }
+  const actual = pathMatches[0];
+  if (actual.prunable) {
+    return createQuarantineEvidence({
+      code: QUARANTINE_CODES.prunableWorktreeRegistration,
+      reason: "Git worktree registration is prunable because its worktree is missing",
+    });
+  }
+  const branchMatches = slot.branch
+    ? metadata.filter((worktree) => worktree.branch === slot.branch)
+    : [];
+  if (pathMatches.length > 1 || branchMatches.length > 1) {
+    return createQuarantineEvidence({
+      code: QUARANTINE_CODES.duplicateGitRegistration,
+      reason: "Git worktree metadata contains a duplicate managed path or branch",
+      details: {
+        expectedBranch: slot.branch,
+        observedBranch: actual.branch ?? null,
+        matchingPathEntries: pathMatches.length,
+        matchingBranchEntries: branchMatches.length,
+      },
+    });
   }
   if (slot.lifecycle === "available" && actual.branch) {
-    return `Available slot unexpectedly has branch '${actual.branch}' checked out`;
+    return createQuarantineEvidence({
+      code: QUARANTINE_CODES.availableBranchConflict,
+      reason: `Available slot unexpectedly has branch '${actual.branch}' checked out`,
+      details: { observedBranch: actual.branch, observedCommit: actual.head },
+    });
+  }
+  if (!await hasValidManagedPathRole(directory, slot)) {
+    return createQuarantineEvidence({
+      code: QUARANTINE_CODES.managedPathRoleConflict,
+      reason: "Managed worktree path conflicts with its lifecycle role",
+    });
+  }
+  if (slot.lifecycle === "task") {
+    return inspectBranchBinding({
+      expectedBranch: slot.branch,
+      observedBranch: actual.branch ?? null,
+      observedCommit: actual.head,
+    });
   }
   return undefined;
 }
 
-function quarantineDuplicateRegistrations(slots) {
-  const active = slots.filter((slot) => slot.lifecycle !== "quarantined");
-  for (const slot of active) {
-    const duplicate = active.find((candidate) => candidate !== slot
-      && (candidate.path === slot.path || (slot.branch && candidate.branch === slot.branch)));
-    if (duplicate) {
-      slot.lifecycle = "quarantined";
-      slot.quarantine = { reason: "Duplicate managed path or branch registration" };
-    }
+async function hasValidManagedPathRole(directory, slot) {
+  if (slot.lifecycle === "task") {
+    if (!slot.intent) return false;
+    return await canonicalPath(slot.path) === await canonicalPath(path.join(directory, slot.intent));
+  }
+  if (slot.lifecycle !== "available") return true;
+  return await canonicalPath(path.dirname(slot.path)) === await canonicalPath(path.join(directory, ".pool"));
+}
+
+async function quarantineDuplicateRegistrations(slots) {
+  const canonicalPaths = await Promise.all(slots.map((slot) => canonicalPath(slot.path)));
+  for (const [index, slot] of slots.entries()) {
+    const hasDuplicate = slots.some((candidate, candidateIndex) => candidate !== slot
+      && (canonicalPaths[candidateIndex] === canonicalPaths[index]
+        || (slot.branch && candidate.branch === slot.branch)));
+    if (!hasDuplicate || slot.lifecycle === "quarantined") continue;
+    slot.lifecycle = "quarantined";
+    slot.quarantine = createQuarantineEvidence({
+      code: QUARANTINE_CODES.duplicateRegistration,
+      reason: "Duplicate managed path or branch registration",
+    });
   }
 }
 
@@ -124,20 +183,6 @@ async function findManagedCandidates(directory) {
   return checked.filter(Boolean);
 }
 
-function parseWorktreeMetadata(output) {
-  return output.split("\n\n").filter(Boolean).map((block) => {
-    const fields = Object.fromEntries(block.split("\n").filter((line) => line.includes(" ")).map((line) => {
-      const separator = line.indexOf(" ");
-      return [line.slice(0, separator), line.slice(separator + 1)];
-    }));
-    return {
-      path: fields.worktree,
-      head: fields.HEAD,
-      branch: fields.branch?.replace("refs/heads/", ""),
-    };
-  });
-}
-
 function createRecoveredSlot(directory, projectRoot, displayPath, worktree) {
   const inPool = path.dirname(displayPath) === path.join(directory, ".pool");
   const conflict = inPool ? Boolean(worktree.branch) : !worktree.branch;
@@ -149,7 +194,12 @@ function createRecoveredSlot(directory, projectRoot, displayPath, worktree) {
     branch: worktree.branch ?? null,
     owners: [],
     landing: "unknown",
-    ...(conflict ? { quarantine: { reason: "Git metadata conflicts with the managed path role" } } : {}),
+    ...(conflict ? {
+      quarantine: createQuarantineEvidence({
+        code: QUARANTINE_CODES.reconstructedRoleConflict,
+        reason: "Git metadata conflicts with the managed path role",
+      }),
+    } : {}),
   };
 }
 
