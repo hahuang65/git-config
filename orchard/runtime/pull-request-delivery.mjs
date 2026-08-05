@@ -1,5 +1,6 @@
 import { readGlobalAlias, runGit, runTrustedAlias } from "./git.mjs";
 import { inspectDeliveryTask } from "./delivery-inspection.mjs";
+import { rebaseOrdinaryBranch } from "./ordinary-branch-delivery.mjs";
 import { rebaseTask } from "./rebase-service.mjs";
 
 const PULL_REQUEST_TIMEOUT_MS = 120_000;
@@ -7,8 +8,16 @@ const OBJECT_ID_PATTERN = /^[0-9a-f]{40,64}$/;
 
 export async function deliverPullRequest({ cwd, home, intent }) {
   const inspection = await inspectDeliveryTask({ cwd, home, intent });
+  return deliverInspectedPullRequest(inspection, () => rebaseTask({ cwd, home, intent }));
+}
+
+export async function deliverOrdinaryBranchPullRequest(inspection) {
+  return deliverInspectedPullRequest(inspection, () => rebaseOrdinaryBranch(inspection));
+}
+
+async function deliverInspectedPullRequest(inspection, rebase) {
   const publication = await inspectPublication(inspection.slot.path, inspection.slot.branch);
-  const rebased = await rebaseTask({ cwd, home, intent });
+  const rebased = await rebase();
   const currentPublication = await inspectPublication(inspection.slot.path, inspection.slot.branch);
   assertPublicationUnchanged(publication, currentPublication);
   if (currentPublication.tip
