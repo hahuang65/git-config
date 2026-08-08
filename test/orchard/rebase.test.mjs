@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { access, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -67,6 +67,19 @@ async function pushRemoteCommit(home, origin) {
   return git(updater, ["rev-parse", "HEAD"]);
 }
 
+async function createConflictedTask(home) {
+  const { repository } = await createRemoteRepository(home);
+  const task = await createTask(home, repository, "Resolvable Conflict");
+  await commitFile(task.path, "README.md", "task change\n", "task conflict");
+  const originalTaskTip = git(task.path, ["rev-parse", "HEAD"]);
+  await commitFile(repository, "README.md", "trunk change\n", "trunk conflict");
+  return { repository, task, originalTaskTip };
+}
+
+async function readProjectState(home) {
+  return JSON.parse(await readFile(path.join(home, ".orchard", "alpha", "state.json"), "utf8"));
+}
+
 test("rebase synchronizes a behind trunk before rebasing the active task", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
   const { origin, repository } = await createRemoteRepository(home);
@@ -81,6 +94,31 @@ test("rebase synchronizes a behind trunk before rebasing the active task", async
   assert.equal(rebased.rebase.status, "rebased");
   assert.equal(git(repository, ["rev-parse", "main"]), remoteTip);
   assert.equal(git(task.path, ["rev-parse", "HEAD^"]), remoteTip);
+});
+
+test("a conflict-owning rebase accepts an already based task", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { repository } = await createRemoteRepository(home);
+  const task = await createTask(home, repository, "Already Based");
+
+  const output = await runOrchard(task.path, home, ["rebase", "--resolve-conflicts", "--json"]);
+
+  assert.equal(output.exitCode, 0, output.stderr);
+  assert.equal(JSON.parse(output.stdout).rebase.status, "rebased");
+  assert.equal((await readProjectState(home)).slots[0].recovery, undefined);
+});
+
+test("a conflict-owning rebase clears temporary recovery after success", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { repository } = await createRemoteRepository(home);
+  const task = await createTask(home, repository, "Owned Success");
+  await commitFile(repository, "local-main.txt", "local main\n", "local main");
+
+  const output = await runOrchard(task.path, home, ["rebase", "--resolve-conflicts", "--json"]);
+
+  assert.equal(output.exitCode, 0, output.stderr);
+  assert.equal(JSON.parse(output.stdout).rebase.status, "rebased");
+  assert.equal((await readProjectState(home)).slots[0].recovery, undefined);
 });
 
 test("rebase accepts a task worktree name from primary trunk", async () => {
@@ -206,11 +244,7 @@ test("a conflict restores the task while preserving synchronized trunk", async (
 
 test("a rebase conflict restores the active task tip", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
-  const { repository } = await createRemoteRepository(home);
-  const task = await createTask(home, repository, "Conflicted Task");
-  await commitFile(task.path, "README.md", "task change\n", "task conflict");
-  const originalTaskTip = git(task.path, ["rev-parse", "HEAD"]);
-  await commitFile(repository, "README.md", "trunk change\n", "trunk conflict");
+  const { repository, task, originalTaskTip } = await createConflictedTask(home);
   const originalTrunkTip = git(repository, ["rev-parse", "HEAD"]);
 
   const output = await runOrchard(task.path, home, ["rebase", "--json"]);
@@ -220,4 +254,198 @@ test("a rebase conflict restores the active task tip", async () => {
   assert.equal(git(task.path, ["rev-parse", "HEAD"]), originalTaskTip);
   assert.equal(git(repository, ["rev-parse", "main"]), originalTrunkTip);
   assert.equal(git(task.path, ["status", "--porcelain"]), "");
+});
+
+test("a harness-owned rebase preserves conflicts with durable recovery metadata", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { task, originalTaskTip } = await createConflictedTask(home);
+
+  const output = await runOrchard(task.path, home, ["rebase", "--resolve-conflicts", "--json"]);
+
+  assert.equal(output.exitCode, 0, output.stderr);
+  const outcome = JSON.parse(output.stdout);
+  assert.equal(outcome.rebase.status, "needs-conflict-resolution");
+  assert.equal(outcome.rebase.originalTip, originalTaskTip);
+  assert.match(outcome.rebase.operationId, /^[0-9a-f-]{36}$/);
+  assert.equal(git(task.path, ["diff", "--name-only", "--diff-filter=U"]), "README.md");
+  const state = await readProjectState(home);
+  assert.deepEqual(state.slots[0].recovery, {
+    kind: "rebase",
+    status: "conflicted",
+    operationId: outcome.rebase.operationId,
+    originalTip: outcome.rebase.originalTip,
+    targetTip: outcome.rebase.targetTip,
+    originalCommitCount: 2,
+  });
+
+  const refreshed = await runOrchard(task.path, home, ["status", "--refresh", "--json"]);
+  assert.equal(refreshed.exitCode, 0, refreshed.stderr);
+  assert.equal(JSON.parse(refreshed.stdout).projects[0].slots[0].lifecycle, "task");
+});
+
+test("refresh quarantines a paused rebase whose target metadata changed", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { task } = await createConflictedTask(home);
+  const started = await runOrchard(task.path, home, ["rebase", "--resolve-conflicts", "--json"]);
+  const operation = JSON.parse(started.stdout).rebase;
+  const ontoPath = git(task.path, ["rev-parse", "--git-path", "rebase-merge/onto"]);
+  await writeFile(ontoPath, `${operation.originalTip}\n`);
+
+  const refreshed = await runOrchard(task.path, home, ["status", "--refresh", "--json"]);
+
+  assert.equal(refreshed.exitCode, 0, refreshed.stderr);
+  assert.equal(JSON.parse(refreshed.stdout).projects[0].slots[0].lifecycle, "quarantined");
+});
+
+test("refresh quarantines a paused rebase whose original-tip metadata changed", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { task } = await createConflictedTask(home);
+  const started = await runOrchard(task.path, home, ["rebase", "--resolve-conflicts", "--json"]);
+  const operation = JSON.parse(started.stdout).rebase;
+  const originalHeadPath = git(task.path, ["rev-parse", "--git-path", "rebase-merge/orig-head"]);
+  await writeFile(originalHeadPath, `${operation.targetTip}\n`);
+
+  const refreshed = await runOrchard(task.path, home, ["status", "--refresh", "--json"]);
+
+  assert.equal(refreshed.exitCode, 0, refreshed.stderr);
+  assert.equal(JSON.parse(refreshed.stdout).projects[0].slots[0].lifecycle, "quarantined");
+});
+
+test("finalizing an aborted Orchard rebase clears its recovery state", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { task, originalTaskTip } = await createConflictedTask(home);
+  const started = await runOrchard(task.path, home, ["rebase", "--resolve-conflicts", "--json"]);
+  const operation = JSON.parse(started.stdout).rebase;
+  git(task.path, ["rebase", "--abort"]);
+
+  const finalized = await runOrchard(task.path, home, [
+    "rebase",
+    "--finalize-operation",
+    operation.operationId,
+    "--json",
+  ]);
+
+  assert.equal(finalized.exitCode, 0, finalized.stderr);
+  assert.equal(JSON.parse(finalized.stdout).rebase.status, "aborted");
+  assert.equal(git(task.path, ["rev-parse", "HEAD"]), originalTaskTip);
+  assert.equal((await readProjectState(home)).slots[0].recovery, undefined);
+});
+
+test("a target-side conflict resolution keeps the replayed task commit", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { task } = await createConflictedTask(home);
+  const started = await runOrchard(task.path, home, ["rebase", "--resolve-conflicts", "--json"]);
+  const operation = JSON.parse(started.stdout).rebase;
+  await writeFile(path.join(task.path, "README.md"), "trunk change\n");
+  git(task.path, ["add", "README.md"]);
+  git(task.path, ["commit", "--allow-empty", "--reuse-message=REBASE_HEAD"]);
+  git(task.path, ["-c", "core.editor=true", "rebase", "--continue"]);
+
+  const finalized = await runOrchard(task.path, home, [
+    "rebase",
+    "--finalize-operation",
+    operation.operationId,
+    "--json",
+  ]);
+
+  assert.equal(finalized.exitCode, 0, finalized.stderr);
+  assert.equal(JSON.parse(finalized.stdout).rebase.status, "finalized");
+  assert.equal(git(task.path, ["rev-list", "--count", `${operation.targetTip}..HEAD`]), "2");
+});
+
+test("finalization rejects a completed rebase that skipped a task commit", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { task } = await createConflictedTask(home);
+  const started = await runOrchard(task.path, home, ["rebase", "--resolve-conflicts", "--json"]);
+  const operation = JSON.parse(started.stdout).rebase;
+  git(task.path, ["rebase", "--skip"]);
+
+  const finalized = await runOrchard(task.path, home, [
+    "rebase",
+    "--finalize-operation",
+    operation.operationId,
+    "--json",
+  ]);
+
+  assert.equal(finalized.exitCode, 1);
+  assert.match(finalized.stderr, /task commit count/);
+  assert.equal((await readProjectState(home)).slots[0].recovery.operationId, operation.operationId);
+});
+
+test("finalization rejects an assigned branch reset that discards the task", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { task } = await createConflictedTask(home);
+  const started = await runOrchard(task.path, home, ["rebase", "--resolve-conflicts", "--json"]);
+  const operation = JSON.parse(started.stdout).rebase;
+  git(task.path, ["rebase", "--abort"]);
+  git(task.path, ["reset", "--hard", operation.targetTip]);
+
+  const finalized = await runOrchard(task.path, home, [
+    "rebase",
+    "--finalize-operation",
+    operation.operationId,
+    "--json",
+  ]);
+
+  assert.equal(finalized.exitCode, 1);
+  assert.match(finalized.stderr, /task commit count|completed rebase/);
+  assert.equal((await readProjectState(home)).slots[0].recovery.operationId, operation.operationId);
+});
+
+test("finalizing a resolved Orchard rebase clears its recovery state", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { task } = await createConflictedTask(home);
+  const started = await runOrchard(task.path, home, ["rebase", "--resolve-conflicts", "--json"]);
+  const operation = JSON.parse(started.stdout).rebase;
+  await writeFile(path.join(task.path, "README.md"), "trunk and task change\n");
+  git(task.path, ["add", "README.md"]);
+  git(task.path, ["-c", "core.editor=true", "rebase", "--continue"]);
+
+  const finalized = await runOrchard(task.path, home, [
+    "rebase",
+    "--finalize-operation",
+    operation.operationId,
+    "--json",
+  ]);
+
+  assert.equal(finalized.exitCode, 0, finalized.stderr);
+  const outcome = JSON.parse(finalized.stdout);
+  assert.equal(outcome.rebase.status, "finalized");
+  assert.equal(git(task.path, ["symbolic-ref", "--short", "HEAD"]), task.branch);
+  assert.equal(git(task.path, ["status", "--porcelain"]), "");
+  assert.equal((await readProjectState(home)).slots[0].recovery, undefined);
+
+  const retried = await runOrchard(task.path, home, [
+    "rebase",
+    "--finalize-operation",
+    operation.operationId,
+    "--json",
+  ]);
+  assert.equal(retried.exitCode, 0, retried.stderr);
+  assert.deepEqual(JSON.parse(retried.stdout), outcome);
+  const completionPath = path.join(
+    home,
+    ".orchard",
+    "alpha",
+    "completed-rebases",
+    `${operation.operationId}.json`,
+  );
+  const completion = JSON.parse(await readFile(completionPath, "utf8"));
+  assert.equal(completion.operationId, operation.operationId);
+  assert.deepEqual(completion.outcome.worktree, outcome.worktree);
+});
+
+test("conflict outcomes preserve filenames containing newlines", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-rebase-"));
+  const { repository } = await createRemoteRepository(home);
+  const filename = "line-one\nline-two.txt";
+  await commitFile(repository, filename, "base\n", "newline base");
+  const task = await createTask(home, repository, "Newline Conflict");
+  await commitFile(task.path, filename, "task\n", "newline task");
+  await commitFile(repository, filename, "trunk\n", "newline trunk");
+
+  const output = await runOrchard(task.path, home, ["rebase", "--resolve-conflicts", "--json"]);
+
+  assert.equal(output.exitCode, 0, output.stderr);
+  assert.deepEqual(JSON.parse(output.stdout).rebase.unresolved, [filename]);
 });

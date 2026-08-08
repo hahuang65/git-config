@@ -143,7 +143,7 @@ test("every subcommand help is comprehensive and never mutates Orchard state", a
     status: ["--all", "--refresh", "--json"],
     enter: ["<intent>", "--share", "--owner-pid", "--release-owner", "--print-path", "--json"],
     repair: ["--json"],
-    rebase: ["--json"],
+    rebase: ["--resolve-conflicts", "--finalize-operation", "--json"],
     deliver: ["--keep", "--finalize", "--json"],
     recycle: ["<intent>", "--keep-branch", "--json"],
     prune: ["--apply", "--json"],
@@ -159,6 +159,20 @@ test("every subcommand help is comprehensive and never mutates Orchard state", a
     for (const option of options) assert.match(output.stdout, new RegExp(option.replaceAll("-", "\\-")));
   }
   await assert.rejects(stat(path.join(home, ".orchard")), { code: "ENOENT" });
+});
+
+test("conflict-preserving rebase mode requires machine-readable output", async () => {
+  const output = await runOrchard(["rebase", "--resolve-conflicts"]);
+
+  assert.equal(output.exitCode, 2);
+  assert.match(output.stderr, /--resolve-conflicts requires --json/);
+});
+
+test("rebase finalization rejects malformed operation IDs before mutation", async () => {
+  const output = await runOrchard(["rebase", "--finalize-operation", "not-an-operation", "--json"]);
+
+  assert.equal(output.exitCode, 2);
+  assert.match(output.stderr, /valid operation ID/);
 });
 
 test("bare invocation reports that an isolated home has no Orchard projects", async () => {

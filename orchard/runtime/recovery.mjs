@@ -3,6 +3,7 @@ import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { inspectBranchBinding } from "./branch-binding-verifier.mjs";
+import { isHeadDetached, readInProgressGitOperation, readRebaseOperationMetadata } from "./git-operation-state.mjs";
 import { withProjectLock } from "./lock.mjs";
 import { refreshTaskOwners } from "./ownership.mjs";
 import { canonicalPath } from "./paths.mjs";
@@ -127,6 +128,9 @@ async function registrationConflict(directory, slot, pathMatches, metadata) {
     });
   }
   if (slot.lifecycle === "task") {
+    const rebaseRecovery = await inspectActiveRebaseRecovery(slot, actual, branchMatches);
+    if (rebaseRecovery?.conflict) return rebaseRecovery.conflict;
+    if (rebaseRecovery?.validDetachment) return undefined;
     return inspectBranchBinding({
       expectedBranch: slot.branch,
       observedBranch: actual.branch ?? null,
@@ -134,6 +138,35 @@ async function registrationConflict(directory, slot, pathMatches, metadata) {
     });
   }
   return undefined;
+}
+
+async function inspectActiveRebaseRecovery(slot, actual, branchMatches) {
+  const isRecorded = slot.recovery?.kind === "rebase"
+    && ["rebasing", "conflicted"].includes(slot.recovery.status);
+  if (!isRecorded || await readInProgressGitOperation(slot.path) !== "rebase") return undefined;
+  const metadata = await readRebaseOperationMetadata(slot.path);
+  const validMetadata = metadata?.headName === `refs/heads/${slot.branch}`
+    && metadata.onto === slot.recovery.targetTip
+    && metadata.originalTip === slot.recovery.originalTip;
+  const uniqueBinding = actual.branch === slot.branch
+    ? branchMatches.length === 1
+    : !actual.branch && branchMatches.length === 0;
+  const detachedHead = await isHeadDetached(slot.path);
+  if (validMetadata && uniqueBinding && detachedHead) return { validDetachment: !actual.branch };
+  return {
+    conflict: createQuarantineEvidence({
+      code: QUARANTINE_CODES.rebaseRecoveryConflict,
+      reason: "Active rebase metadata conflicts with durable Orchard recovery",
+      details: {
+        expectedBranch: slot.branch,
+        observedBranch: actual.branch ?? null,
+        expectedTarget: slot.recovery.targetTip,
+        observedTarget: metadata?.onto ?? null,
+        expectedOriginalTip: slot.recovery.originalTip,
+        observedOriginalTip: metadata?.originalTip ?? null,
+      },
+    }),
+  };
 }
 
 async function hasValidManagedPathRole(directory, slot) {

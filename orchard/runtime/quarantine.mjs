@@ -8,6 +8,7 @@ export const QUARANTINE_CODES = Object.freeze({
   missingTaskBranch: "missing-task-branch",
   prunableWorktreeRegistration: "prunable-worktree-registration",
   reconstructedRoleConflict: "reconstructed-role-conflict",
+  rebaseRecoveryConflict: "rebase-recovery-conflict",
 });
 
 export function createQuarantineEvidence({

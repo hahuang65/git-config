@@ -6,7 +6,7 @@ import { enterTask, releaseTaskOwner } from "./entry-service.mjs";
 import { finalizeLocalDelivery } from "./local-delivery.mjs";
 import { createMachineOutcome } from "./protocol.mjs";
 import { pruneProject } from "./prune-service.mjs";
-import { rebaseTask } from "./rebase-service.mjs";
+import { REBASE_HELP, runRebaseCli, validateRebaseCliArgs } from "./rebase-cli.mjs";
 import { repairTask } from "./repair-service.mjs";
 import { recoverAllProjects } from "./recovery.mjs";
 import { recycleTask } from "./recycle-service.mjs";
@@ -110,16 +110,7 @@ Location: run from the exact quarantined worktree, or use its intent from the ma
 Safety: repair changes only Orchard metadata after proving the exact path and assigned branch; dirty task files are preserved, and repair never deletes the accidental branch.
 Failure: unsupported quarantine, caller location, branch-binding evidence, multiple live owners, unresolved recovery, or an in-progress merge, rebase, cherry-pick, revert, or bisect remains quarantined without changing Git.
 `,
-  rebase: `Synchronize trunk, then rebase a clean managed task branch onto it.
-
-Usage: orchard rebase [intent] [--json]
-
-Options:
-  --json  Emit a versioned machine-readable outcome.
-
-Safety: rebase requires clean task and trunk worktrees, fast-forwards a behind trunk, accepts a local trunk ahead of upstream, refuses divergence, automatically aborts conflicts, and never pushes.
-Failure: dirty, unmanaged, divergent, or conflicting work remains preserved; use the commit workflow before rebasing a dirty task.
-`,
+  rebase: REBASE_HELP,
   deliver: `Commit if requested, then deliver a managed task according to trusted Git configuration.
 
 Usage: orchard deliver [intent] [--keep] [--json]
@@ -198,6 +189,10 @@ export async function runOrchardCli(args, io = console) {
     io.log(output);
     return 0;
   }
+  if (command === "rebase") {
+    const validationExitCode = validateRebaseCliArgs(args, io);
+    if (validationExitCode !== undefined) return validationExitCode;
+  }
   const mutatingCommand = !["prune", "destroy"].includes(command) || args.includes("--apply");
   if (COMMANDS.has(command) && mutatingCommand && !args.includes("--help") && !args.includes("-h")) {
     await recoverAllProjects({ home: process.env.HOME });
@@ -243,17 +238,7 @@ export async function runOrchardCli(args, io = console) {
       : formatRepairOutcome(outcome));
     return 0;
   }
-  if (command === "rebase") {
-    const outcome = await rebaseTask({
-      cwd: process.cwd(),
-      home: process.env.HOME,
-      intent: args[1]?.startsWith("--") ? undefined : args[1],
-    });
-    io.log(args.includes("--json")
-      ? JSON.stringify(createMachineOutcome(command, outcome))
-      : `Rebased ${outcome.worktree.branch} onto ${outcome.project.trunk}`);
-    return 0;
-  }
+  if (command === "rebase") return runRebaseCli(args, io);
   if (command === "deliver") return runDeliverCli(args, io);
   if (command === "recycle") {
     const outcome = await recycleTask({
