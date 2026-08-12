@@ -1,3 +1,4 @@
+import { findHarnessOwnerPid } from "./caller-process.mjs";
 import { readCompletionCandidates } from "./completion.mjs";
 import { convertTaskBranch } from "./conversion-service.mjs";
 import { destroyProject } from "./destroy-service.mjs";
@@ -92,6 +93,7 @@ Usage: orchard enter <intent> [--share] [--owner-pid <pid>] [--print-path | --js
 Options:
   --share                  Permit concurrent ownership explicitly.
   --owner-pid <pid>        Record an automation caller process.
+                           Default: the nearest non-shell ancestor process.
   --release-owner <token>  Release one exact ownership claim.
   --print-path             Print only the worktree path without entering it.
   --json                   Emit a versioned transition or release outcome.
@@ -284,7 +286,7 @@ export async function runOrchardCli(args, io = console) {
       cwd: process.cwd(),
       home: process.env.HOME,
       intent: args[1],
-      ownerPid: readIntegerOption(args, "--owner-pid") ?? process.ppid,
+      ownerPid: readIntegerOption(args, "--owner-pid") ?? findHarnessOwnerPid(),
       shared: args.includes("--share"),
     });
     if (args.includes("--json")) io.log(JSON.stringify(createMachineOutcome(command, outcome)));

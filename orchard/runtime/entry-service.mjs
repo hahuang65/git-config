@@ -1,9 +1,10 @@
+import { findHarnessOwnerPid } from "./caller-process.mjs";
 import { findMainProjectDirectory } from "./git.mjs";
 import { withProjectLock } from "./lock.mjs";
 import { claimTaskOwner } from "./ownership.mjs";
 import { findProjectRegistry, saveProjectState } from "./registry.mjs";
 
-export async function enterTask({ cwd, home, intent, ownerPid = process.ppid, shared = false }) {
+export async function enterTask({ cwd, home, intent, ownerPid = findHarnessOwnerPid(), shared = false }) {
   const projectRoot = await findMainProjectDirectory(cwd);
   if (!projectRoot) throw new Error("orchard enter must run inside a Git repository");
   const located = await findProjectRegistry({ home, projectRoot });
