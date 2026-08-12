@@ -33,3 +33,4 @@ spec/tmp/*
 AGENTS.md
 CRUSH.md
 .claude/settings.local.json
+domain-documentation.json
