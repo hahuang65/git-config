@@ -2,10 +2,6 @@
 
 [include]
   path = ~/.gitconfig.secret
-[includeIf "hasconfig:remote.*.url:git@github.com:summit-partners/**"]
-  path = ~/.a5.gitconfig
-[includeIf "hasconfig:remote.*.url:sp:**"]
-  path = ~/.a5.gitconfig
 [url "git@github.com:"]
 	pushInsteadOf = "https://github.com/"
 	insteadOf = https://github.com/
@@ -154,3 +150,11 @@
   which = "!f() { git aliases | grep "${1}"; }; f"
   sync-mirror = "!f() { ORIGIN_URL=$(git remote get-url origin); if ! echo \"$ORIGIN_URL\" | grep -q 'git.sr.ht'; then echo \"Origin is not a Sourcehut repository. Skipping.\"; return 1; fi; if ! git remote get-url github > /dev/null 2>&1; then REPO=$(basename \"$ORIGIN_URL\" .git); GH_USER=$(gh auth status --json hosts | jq -r '.hosts[\"github.com\"][0].login'); if [ -z \"$GH_USER\" ] || [ \"$GH_USER\" = \"null\" ]; then echo \"Could not determine GitHub username from gh auth.\"; return 1; fi; git remote add github \"git@github.com:${GH_USER}/${REPO}.git\" && echo \"Added github remote: git@github.com:${GH_USER}/${REPO}.git\"; fi; TRUNK=$(git trunk-branch); CURRENT=$(git branch-name); git fetch github && git switch \"$TRUNK\" && git rebase github/\"$TRUNK\" && git push origin \"$TRUNK\" && git switch \"$CURRENT\"; }; f"
   wip = !git add --all && git commit --no-verify --message "WIP"
+
+# Keep these includeIf sections LAST: later values win in Git config, so the
+# A5 overrides (core.excludesFile, ai.projectFamily, orchard.*) must be read
+# after this file's own [core] settings or they are silently overridden.
+[includeIf "hasconfig:remote.*.url:git@github.com:summit-partners/**"]
+  path = ~/.a5.gitconfig
+[includeIf "hasconfig:remote.*.url:sp:**"]
+  path = ~/.a5.gitconfig
