@@ -6,6 +6,7 @@ import { proveLanding } from "./landing.mjs";
 import { withProjectLock } from "./lock.mjs";
 import { refreshTaskOwners } from "./ownership.mjs";
 import { findProjectRegistry, saveProjectState } from "./registry.mjs";
+import { resolveTaskBaseBranch } from "./task-base.mjs";
 import { assertCleanWorktree } from "./workspace-checks.mjs";
 
 export async function recycleTask({ cwd, home, intent, keepBranch = false }) {
@@ -40,16 +41,17 @@ export async function validateRecyclable(registry, slot, cwd) {
   if (callerRoot === await realpath(slot.path)) throw new Error("Cannot recycle the caller's current worktree");
   await assertCleanWorktree(slot.path, "task worktree");
   const { stdout: featureTip } = await runGit(registry.state.project.root, ["rev-parse", slot.branch]);
+  const baseBranch = await resolveTaskBaseBranch(registry, slot);
   const proof = await proveLanding({
     projectRoot: registry.state.project.root,
     featureBranch: slot.branch,
     featureTip,
-    trunk: registry.state.project.trunk,
+    trunk: baseBranch,
   });
   if (proof.status !== "landed") {
-    throw new Error(`Task branch '${slot.branch}' is not proven landed on trunk (${proof.evidence})`);
+    throw new Error(`Task branch '${slot.branch}' is not proven integrated into '${baseBranch}' or merged by pull request (${proof.evidence})`);
   }
-  return proof;
+  return { ...proof, baseBranch };
 }
 
 export async function recycleSlot(registry, slot, { keepBranch, proof }) {
@@ -68,11 +70,14 @@ export async function recycleSlot(registry, slot, { keepBranch, proof }) {
     owners: [],
     availableAt: new Date().toISOString(),
   });
+  delete slot.baseBranch;
   delete slot.pendingCleanup;
   if (cleanupOperationId) slot.completedCleanupOperationId = cleanupOperationId;
   await saveProjectState(registry);
   if (!keepBranch) {
-    const deleteOption = proof.evidence === "ancestry" ? "-d" : "-D";
+    const safelyMergedIntoHead = proof.evidence === "ancestry"
+      && proof.baseBranch === registry.state.project.trunk;
+    const deleteOption = safelyMergedIntoHead ? "-d" : "-D";
     await runGit(registry.state.project.root, ["branch", deleteOption, branch]);
   }
   return {

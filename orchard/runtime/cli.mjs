@@ -28,9 +28,9 @@ Commands:
   status    Show managed worktrees (default)
   enter     Enter an existing task worktree
   repair    Restore a proven quarantined branch binding
-  rebase    Synchronize trunk and rebase a task branch
+  rebase    Synchronize the task base and rebase a task branch
   deliver   Commit if requested, then apply project delivery policy
-  recycle   Return landed work to the available pool
+  recycle   Return completed work to the available pool
   prune     Preview or remove excess available worktrees
   destroy   Preview or destroy a project group
 
@@ -81,7 +81,7 @@ Options:
   --print-path  Print only the converted worktree path without entering it.
   --json        Emit a versioned transition outcome without entering it.
 
-Safety: conversion requires a local task branch and preserves staged, unstaged, and untracked work; ignored files remain behind.
+Safety: conversion records the branch creation base when Git can prove it, preserves staged, unstaged, and untracked work, and leaves ignored files behind.
 Failure: main, detached, already-linked, or unrecoverable conversion state is rejected without deleting source work.
 `,
   status: STATUS_HELP,
@@ -123,10 +123,10 @@ Options:
   --finalize <intent>  Complete pending local-delivery cleanup by worktree name.
   --json               Never prompt; emit a versioned outcome, including needs-commit.
 
-Safety: interactive delivery shows concise status and asks before opening Git commit; unstaged or untracked work uses Git interactive staging. Local delivery uses internal fast-forward integration, while pull-request delivery rebases and runs git pr create --web --fill only when publication is fast-forward safe.
+Safety: interactive delivery shows concise status and asks before opening Git commit; unstaged or untracked work uses Git interactive staging. Delivery rebases onto the recorded base branch. Local delivery fast-forwards that base, while pull-request delivery selects it in git pr create only when publication is fast-forward safe.
 Failure: declining commit exits unchanged; ambiguous policy, remote publication, dirty post-commit state, divergence, or rebase failure stops without force-pushing.
 `,
-  recycle: `Return one clean, landed, unoccupied task worktree to the available pool.
+  recycle: `Return one clean, completed, unoccupied task worktree to the available pool.
 
 Usage: orchard recycle <intent> [--keep-branch] [--json]
 
@@ -134,8 +134,8 @@ Options:
   --keep-branch  Preserve the completed local branch.
   --json         Emit a versioned recycle outcome.
 
-Safety: recycling requires clean, landed, unoccupied work and removes the local branch unless --keep-branch is set.
-Failure: dirty, unlanded, occupied, or unverifiable tasks remain attached and registered.
+Safety: recycling requires clean, unoccupied work that is integrated into its base branch or has an exact-head merged pull request. It removes the local branch unless --keep-branch is set.
+Failure: dirty, incomplete, occupied, or unverifiable tasks remain attached and registered.
 `,
   prune: `Preview or apply conservative project-pool reduction.
 
@@ -145,7 +145,7 @@ Options:
   --apply  Apply the displayed plan; default behavior is preview-only.
   --json   Emit a versioned prune plan and outcome.
 
-Safety: prune is preview-only by default, recycles eligible landed tasks first, and removes only excess available slots.
+Safety: prune is preview-only by default, recycles eligible completed tasks first, and removes only excess available slots.
 Failure: blocked tasks and unverifiable slots are preserved and reported.
 `,
   destroy: `Preview or destroy one named Orchard project group.

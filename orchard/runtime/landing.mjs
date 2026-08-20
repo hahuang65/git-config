@@ -20,9 +20,7 @@ export async function proveLanding({
   if (!Array.isArray(pullRequests)) return { status: "unverifiable", evidence: "malformed-forge-response" };
   for (const pullRequest of pullRequests) {
     if (!matchesFeatureTip(pullRequest, featureTip)) continue;
-    if (await isTipAncestorOfTrunk(projectRoot, pullRequest.mergeCommit.oid, trunk)) {
-      return { status: "landed", evidence: "github-pull-request", url: pullRequest.url };
-    }
+    return { status: "landed", evidence: "github-pull-request", url: pullRequest.url };
   }
   return { status: "unverifiable", evidence: pullRequests.length ? "forge-mismatch" : "no-forge-evidence" };
 }

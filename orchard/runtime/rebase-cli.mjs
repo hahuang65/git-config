@@ -3,7 +3,7 @@ import { finalizeRebaseOperation, rebaseTask } from "./rebase-service.mjs";
 
 const OPERATION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-export const REBASE_HELP = `Synchronize trunk, then rebase a clean managed task branch onto it.
+export const REBASE_HELP = `Synchronize the task's base branch, then rebase a clean managed task branch onto it.
 
 Usage: orchard rebase [intent] [--resolve-conflicts] [--json]
        orchard rebase --finalize-operation <operation-id> --json
@@ -13,7 +13,7 @@ Options:
   --finalize-operation <id>       Verify and clear one completed conflict-resolution operation; requires --json.
   --json                          Emit a versioned machine-readable outcome.
 
-Safety: rebase requires clean task and trunk worktrees, fast-forwards a behind trunk, accepts a local trunk ahead of upstream, refuses divergence, and never pushes. Conflicts are automatically aborted unless an owning machine workflow requests resolution.
+Safety: rebase requires clean task and main project directories, synchronizes the recorded base when it has an upstream, refuses divergence, and never pushes. Conflicts are automatically aborted unless an owning machine workflow requests resolution.
 Failure: dirty, unmanaged, divergent, or non-conflict failures remain preserved; use the commit workflow before rebasing a dirty task.
 `;
 
@@ -48,7 +48,7 @@ export async function runRebaseCli(args, io) {
     });
   io.log(args.includes("--json")
     ? JSON.stringify(createMachineOutcome("rebase", outcome))
-    : `Rebased ${outcome.worktree.branch} onto ${outcome.project.trunk}`);
+    : `Rebased ${outcome.worktree.branch} onto ${outcome.rebase.baseBranch ?? outcome.project.trunk}`);
   return 0;
 }
 

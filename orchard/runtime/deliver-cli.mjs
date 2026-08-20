@@ -52,10 +52,10 @@ export async function runDeliverCli(args, io = console) {
 
 async function reportDelivery(outcome, io) {
   if (outcome.delivery.strategy === "pull-request") {
-    io.log(`Opened pull-request form for ${outcome.worktree.branch}`);
+    io.log(`Opened pull-request form for ${outcome.worktree.branch} into ${outcome.delivery.baseBranch}`);
     return;
   }
-  io.log(`Fast-forwarded ${outcome.project.trunk} to ${outcome.integration.tip}`);
+  io.log(`Fast-forwarded ${outcome.integration.baseBranch} to ${outcome.integration.tip}`);
   if (outcome.transition.kind !== "return-main") return;
   const requested = await writeManagedReturnRequest(outcome.transition);
   if (!requested) {

@@ -8,10 +8,9 @@ import { readCompletedRebase, recordCompletedRebase } from "./rebase-completion.
 import { saveProjectState } from "./registry.mjs";
 import { assertCleanWorktree } from "./workspace-checks.mjs";
 
-export async function rebaseTaskWithConflictRecovery(registry, slot) {
-  const { trunk } = registry.state.project;
+export async function rebaseTaskWithConflictRecovery(registry, slot, target) {
   const originalTip = await readTip(slot.path, "HEAD");
-  const targetTip = await readTip(slot.path, trunk);
+  const targetTip = await readTip(slot.path, target.revision);
   const originalCommitCount = await countCommits(slot.path, targetTip, originalTip);
   const recovery = {
     kind: "rebase",
@@ -24,11 +23,11 @@ export async function rebaseTaskWithConflictRecovery(registry, slot) {
   slot.recovery = recovery;
   await saveProjectState(registry);
   try {
-    await runGit(slot.path, ["rebase", "--reapply-cherry-picks", "--empty=keep", trunk]);
+    await runGit(slot.path, ["rebase", "--reapply-cherry-picks", "--empty=keep", target.revision]);
   } catch (error) {
     return handleFailedRebase(registry, slot, recovery, error);
   }
-  const tip = await verifyRebasedTip(registry, slot, targetTip);
+  const tip = await verifyRebasedTip(slot, target, targetTip);
   await assertCompletedRebase(slot, recovery, tip);
   delete slot.recovery;
   await saveProjectState(registry);
@@ -134,9 +133,9 @@ async function abortAndClearRecovery(registry, slot, originalTip, rebaseError) {
   throw new Error(`Task rebase failed and was automatically aborted; the task tip was restored: ${rebaseError.message}`, { cause: rebaseError });
 }
 
-async function verifyRebasedTip(registry, slot, targetTip) {
+async function verifyRebasedTip(slot, target, targetTip) {
   if (!await isTipAncestorOfTrunk(slot.path, targetTip, slot.branch)) {
-    throw new Error(`Rebased task '${slot.branch}' does not descend from trunk '${registry.state.project.trunk}'`);
+    throw new Error(`Rebased task '${slot.branch}' does not descend from base branch '${target.branch}'`);
   }
   return readTip(slot.path, "HEAD");
 }

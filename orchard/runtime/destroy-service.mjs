@@ -7,6 +7,7 @@ import { withProjectLock } from "./lock.mjs";
 import { isProcessAlive } from "./ownership.mjs";
 import { locateProjectRegistry } from "./project-locator.mjs";
 import { saveProjectState } from "./registry.mjs";
+import { resolveTaskBaseBranch } from "./task-base.mjs";
 
 export async function destroyProject({ cwd, home, projectName, apply = false, gates = {} }) {
   const located = await locateProjectRegistry({ cwd, home, projectName });
@@ -57,13 +58,15 @@ async function assessSlot(registry, slot) {
     return { dirty, landing: "not-applicable", unlanded: dirty, liveUse, unverifiable: false };
   }
   const { stdout: featureTip } = await runGit(slot.path, ["rev-parse", "HEAD"]);
+  const baseBranch = await resolveTaskBaseBranch(registry, slot);
   const proof = await proveLanding({
     projectRoot: registry.state.project.root,
     featureBranch: slot.branch,
     featureTip,
-    trunk: registry.state.project.trunk,
+    trunk: baseBranch,
   });
   return {
+    baseBranch,
     dirty,
     landing: proof.status,
     unlanded: dirty || proof.status !== "landed",
@@ -89,7 +92,8 @@ async function applyDestroy({ cwd, home, projectName, plan, gates }) {
       await saveProjectState(registry);
       removed.push({ id: slot.id, path: slot.path });
       if (gates.deleteBranches && worktree.branch) {
-        const deleteOption = worktree.unlanded || worktree.unverifiable ? "-D" : "-d";
+        const mergedIntoHead = worktree.baseBranch === registry.state.project.trunk;
+        const deleteOption = worktree.unlanded || worktree.unverifiable || !mergedIntoHead ? "-D" : "-d";
         await runGit(registry.state.project.root, ["branch", deleteOption, worktree.branch]);
         deletedBranches.push(worktree.branch);
       }

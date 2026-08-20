@@ -28,21 +28,32 @@ export async function validateTaskWorkspace(registry, slot) {
 }
 
 export async function rebaseTaskOntoTrunk(registry, slot) {
-  const { root: projectRoot, trunk } = registry.state.project;
+  const { trunk } = registry.state.project;
+  return rebaseTaskOntoTarget(registry, slot, { branch: trunk, revision: trunk });
+}
+
+export async function rebaseTaskOntoTarget(registry, slot, target) {
+  const { root: projectRoot } = registry.state.project;
   const { stdout: originalTip } = await runGit(slot.path, ["rev-parse", "HEAD"]);
   try {
-    await runGit(slot.path, ["rebase", trunk]);
+    await runGit(slot.path, ["rebase", target.revision]);
   } catch (error) {
-    await abortFailedRebase(slot.path, originalTip, error);
+    await abortFailedRebase(
+      slot.path,
+      originalTip,
+      target.branch,
+      registry.state.project.trunk,
+      error,
+    );
   }
-  if (!await isTipAncestorOfTrunk(projectRoot, trunk, slot.branch)) {
-    throw new Error(`Rebased task '${slot.branch}' does not descend from trunk '${trunk}'`);
+  if (!await isTipAncestorOfTrunk(projectRoot, target.revision, slot.branch)) {
+    throw new Error(`Rebased task '${slot.branch}' does not descend from base branch '${target.branch}'`);
   }
   const { stdout: rebasedTip } = await runGit(slot.path, ["rev-parse", "HEAD"]);
   return rebasedTip;
 }
 
-async function abortFailedRebase(worktreePath, originalTip, rebaseError) {
+async function abortFailedRebase(worktreePath, originalTip, baseBranch, trunk, rebaseError) {
   try {
     await runGit(worktreePath, ["rebase", "--abort"]);
   } catch (abortError) {
@@ -55,5 +66,8 @@ async function abortFailedRebase(worktreePath, originalTip, rebaseError) {
   if (restoredTip !== originalTip) {
     throw new Error(`Task rebase failed and abort did not restore the original tip at ${worktreePath}`);
   }
-  throw new Error(`Task rebase encountered a conflict or other failure and was automatically aborted; the task tip was restored and synchronized trunk was preserved: ${rebaseError.message}`, { cause: rebaseError });
+  const preservedBranch = baseBranch === trunk
+    ? "synchronized trunk was preserved"
+    : `synchronized base branch '${baseBranch}' was preserved`;
+  throw new Error(`Task rebase encountered a conflict or other failure and was automatically aborted; the task tip was restored and ${preservedBranch}: ${rebaseError.message}`, { cause: rebaseError });
 }

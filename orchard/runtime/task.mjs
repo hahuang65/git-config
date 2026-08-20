@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 
-export function createTaskSlot({ worktreePath, intent, branch }) {
+export function createTaskSlot({ worktreePath, intent, branch, baseBranch }) {
   return {
     id: randomUUID(),
     lifecycle: "task",
     path: worktreePath,
     intent,
     branch,
+    baseBranch,
     owners: [],
     createdAt: new Date().toISOString(),
   };

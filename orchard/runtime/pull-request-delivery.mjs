@@ -1,6 +1,7 @@
 import { readGlobalAlias, runGit, runTrustedAlias } from "./git.mjs";
 import { inspectDeliveryTask } from "./delivery-inspection.mjs";
 import { rebaseTask } from "./rebase-service.mjs";
+import { resolveTaskBaseBranch } from "./task-base.mjs";
 
 const PULL_REQUEST_TIMEOUT_MS = 120_000;
 const OBJECT_ID_PATTERN = /^[0-9a-f]{40,64}$/;
@@ -8,7 +9,14 @@ const OBJECT_ID_PATTERN = /^[0-9a-f]{40,64}$/;
 export async function deliverPullRequest({ cwd, home, intent }) {
   const inspection = await inspectDeliveryTask({ cwd, home, intent });
   const publication = await inspectPublication(inspection.slot.path, inspection.slot.branch);
-  const rebased = await rebaseTask({ cwd, home, intent });
+  const baseBranch = await resolveTaskBaseBranch(inspection.registry, inspection.slot);
+  const rebased = await rebaseTask({
+    cwd,
+    home,
+    intent,
+    baseBranch,
+    preferredRemote: publication.remote,
+  });
   const currentPublication = await inspectPublication(inspection.slot.path, inspection.slot.branch);
   assertPublicationUnchanged(publication, currentPublication);
   if (currentPublication.tip
@@ -19,11 +27,15 @@ export async function deliverPullRequest({ cwd, home, intent }) {
   if (pullRequestAlias === undefined) throw new Error("Pull-request delivery requires a trusted global git pr alias");
   const finalPublication = await observePublication(inspection.slot.path, inspection.slot.branch);
   assertPublicationUnchanged(currentPublication, finalPublication);
+  const pullRequestArguments = ["create", "--web", "--fill"];
+  if (baseBranch !== inspection.registry.state.project.trunk) {
+    pullRequestArguments.push("--base", baseBranch);
+  }
   await runTrustedAlias(
     inspection.slot.path,
     "pr",
     pullRequestAlias,
-    ["create", "--web", "--fill"],
+    pullRequestArguments,
     { timeout: PULL_REQUEST_TIMEOUT_MS },
   );
   return {
@@ -32,6 +44,7 @@ export async function deliverPullRequest({ cwd, home, intent }) {
       status: "pr-form-opened",
       strategy: "pull-request",
       remote: publication.remote,
+      baseBranch,
       publishedTip: publication.tip,
     },
   };

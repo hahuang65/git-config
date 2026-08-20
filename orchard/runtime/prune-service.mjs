@@ -8,6 +8,7 @@ import { withProjectLock } from "./lock.mjs";
 import { isProcessAlive } from "./ownership.mjs";
 import { recycleTask } from "./recycle-service.mjs";
 import { findProjectRegistry, saveProjectState } from "./registry.mjs";
+import { resolveTaskBaseBranch } from "./task-base.mjs";
 
 export async function pruneProject({ cwd, home, projectName, apply = false }) {
   const capacity = readOrchardCapacity();
@@ -58,11 +59,12 @@ async function isEligibleForRecycle(registry, slot) {
   const { stdout: status } = await runGit(slot.path, ["status", "--porcelain", "--untracked-files=normal"]);
   if (status) return false;
   const { stdout: featureTip } = await runGit(slot.path, ["rev-parse", "HEAD"]);
+  const baseBranch = await resolveTaskBaseBranch(registry, slot);
   const proof = await proveLanding({
     projectRoot: registry.state.project.root,
     featureBranch: slot.branch,
     featureTip,
-    trunk: registry.state.project.trunk,
+    trunk: baseBranch,
   });
   return proof.status === "landed";
 }

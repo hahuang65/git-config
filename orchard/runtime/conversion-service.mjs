@@ -7,6 +7,7 @@ import { normalizeIntent } from "./intent.mjs";
 import { withProjectLock } from "./lock.mjs";
 import { findProjectRegistry, openProjectRegistry, saveProjectState } from "./registry.mjs";
 import { createTaskOutcome, createTaskSlot } from "./task.mjs";
+import { inferTaskBaseBranch } from "./task-base.mjs";
 import { readCurrentBranch } from "./workspace-checks.mjs";
 
 export async function convertTaskBranch({ cwd, home, requestedIntent }) {
@@ -31,6 +32,7 @@ async function convertUnderLock({ home, projectRoot, trunk, branch, intent, capa
     throw new Error(`Orchard capacity of ${capacity} reached for ${registry.state.project.name}`);
   }
   if (await readCurrentBranch(projectRoot) !== branch) throw new Error("The task branch changed during conversion");
+  const baseBranch = await inferTaskBaseBranch({ projectRoot, taskBranch: branch, trunk });
   const captured = await captureConversionState(projectRoot);
   const worktreePath = path.join(registry.directory, intent);
   await runGit(projectRoot, ["switch", trunk]);
@@ -40,11 +42,11 @@ async function convertUnderLock({ home, projectRoot, trunk, branch, intent, capa
     await recoverMainCheckout(projectRoot, branch, captured);
     throw new Error(`Conversion failed; branch '${branch}' remains recoverable and target path was '${worktreePath}': ${error.message}`);
   }
-  return finishConversion({ registry, projectRoot, worktreePath, intent, branch, captured });
+  return finishConversion({ registry, projectRoot, worktreePath, intent, branch, baseBranch, captured });
 }
 
-async function finishConversion({ registry, projectRoot, worktreePath, intent, branch, captured }) {
-  const slot = createTaskSlot({ worktreePath, intent, branch });
+async function finishConversion({ registry, projectRoot, worktreePath, intent, branch, baseBranch, captured }) {
+  const slot = createTaskSlot({ worktreePath, intent, branch, baseBranch });
   if (captured) slot.recovery = createRecoveryRecord(captured);
   registry.state.slots.push(slot);
   await saveProjectState(registry);

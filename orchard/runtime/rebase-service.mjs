@@ -1,13 +1,20 @@
 import { findMainProjectDirectory, findRepositoryRoot } from "./git.mjs";
-import { rebaseTaskOntoTrunk, resolveTaskSlot, validateTaskWorkspace } from "./integration.mjs";
+import { rebaseTaskOntoTarget, resolveTaskSlot, validateTaskWorkspace } from "./integration.mjs";
 import { finalizeRecoveredRebase, rebaseTaskWithConflictRecovery } from "./rebase-conflict-recovery.mjs";
 import { withProjectLock } from "./lock.mjs";
 import { refreshTaskOwners } from "./ownership.mjs";
 import { pathsReferToSameLocation } from "./paths.mjs";
 import { findProjectRegistry } from "./registry.mjs";
-import { synchronizeTrunk } from "./synchronize.mjs";
+import { prepareTaskBase } from "./task-base.mjs";
 
-export async function rebaseTask({ cwd, home, intent, preserveConflicts = false }) {
+export async function rebaseTask({
+  cwd,
+  home,
+  intent,
+  preserveConflicts = false,
+  baseBranch,
+  preferredRemote,
+}) {
   const projectRoot = await findMainProjectDirectory(cwd);
   if (!projectRoot) throw new Error("orchard rebase must run inside a Git repository");
   const located = await findProjectRegistry({ home, projectRoot });
@@ -21,10 +28,11 @@ export async function rebaseTask({ cwd, home, intent, preserveConflicts = false 
       throw new Error(`Task worktree '${slot.intent}' is occupied`);
     }
     await validateTaskWorkspace(registry, slot);
-    await synchronizeTrunk(projectRoot, registry.state.project.trunk);
-    const rebase = preserveConflicts
-      ? await rebaseTaskWithConflictRecovery(registry, slot)
-      : { status: "rebased", tip: await rebaseTaskOntoTrunk(registry, slot) };
+    const target = await prepareTaskBase(registry, slot, { baseBranch, preferredRemote });
+    const rebaseOutcome = preserveConflicts
+      ? await rebaseTaskWithConflictRecovery(registry, slot, target)
+      : { status: "rebased", tip: await rebaseTaskOntoTarget(registry, slot, target) };
+    const rebase = { ...rebaseOutcome, baseBranch: target.branch };
     return {
       project: registry.state.project,
       worktree: { path: slot.path, intent: slot.intent, branch: slot.branch },

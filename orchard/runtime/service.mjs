@@ -41,7 +41,7 @@ async function acquireInRegistry({ registry, projectRoot, checkedOutBranch, inte
   }
   const worktreePath = path.join(registry.directory, intent);
   const branch = await createBranchBoundWorktree({ projectRoot, trunk, intent, worktreePath });
-  const slot = createTaskSlot({ worktreePath, intent, branch });
+  const slot = createTaskSlot({ worktreePath, intent, branch, baseBranch: trunk });
   registry.state.slots.push(slot);
   await saveProjectState(registry);
   return createTaskOutcome(registry.state.project, slot);
@@ -63,6 +63,7 @@ async function reuseAvailableSlot({ registry, slot, projectRoot, trunk, intent }
     path: worktreePath,
     intent,
     branch,
+    baseBranch: trunk,
     owners: [],
     assignedAt: new Date().toISOString(),
   });

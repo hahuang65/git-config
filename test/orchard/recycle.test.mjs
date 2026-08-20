@@ -104,7 +104,7 @@ test("recycle preserves an unlanded task worktree and branch", async () => {
   const output = await runOrchard(repository, home, ["recycle", "unlanded", "--json"]);
 
   assert.equal(output.exitCode, 1);
-  assert.match(output.stderr, /not proven landed/);
+  assert.match(output.stderr, /not proven integrated.*or merged by pull request/);
   await access(task.path);
   assert.match(git(repository, ["branch", "--list", task.branch]), /unlanded$/);
   const state = JSON.parse(await readFile(path.join(home, ".orchard", "alpha", "state.json"), "utf8"));
@@ -170,6 +170,35 @@ test("recycle accepts exact-head squash landing proven by pull-request metadata"
   await chmod(gh, 0o700);
 
   const output = await runOrchard(repository, home, ["recycle", "squashed", "--json"], {
+    PATH: `${bin}:${process.env.PATH}`,
+  });
+
+  assert.equal(output.exitCode, 0, output.stderr);
+  assert.equal(JSON.parse(output.stdout).slot.lifecycle, "available");
+});
+
+test("recycle accepts an exact-head pull request merged into a non-trunk branch", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-recycle-"));
+  const repository = await createRepository(home);
+  const created = await runOrchard(repository, home, ["new", "Release Branch", "--offline", "--json"]);
+  assert.equal(created.exitCode, 0, created.stderr);
+  const task = JSON.parse(created.stdout).worktree;
+  await writeFile(path.join(task.path, "release.txt"), "merge into release\n");
+  git(task.path, ["add", "release.txt"]);
+  git(task.path, ["-c", "user.name=Orchard Test", "-c", "user.email=test@example.com", "commit", "-m", "feature"]);
+  const featureTip = git(task.path, ["rev-parse", "HEAD"]);
+  git(repository, ["switch", "-c", "release"]);
+  git(repository, ["merge", "--squash", task.branch]);
+  git(repository, ["-c", "user.name=Orchard Test", "-c", "user.email=test@example.com", "commit", "-m", "squash feature"]);
+  const mergeCommit = git(repository, ["rev-parse", "HEAD"]);
+  git(repository, ["switch", "main"]);
+  const bin = path.join(home, "bin");
+  await mkdir(bin);
+  const gh = path.join(bin, "gh");
+  await writeFile(gh, `#!/bin/sh\nprintf '%s' '[{"state":"MERGED","headRefOid":"${featureTip}","mergeCommit":{"oid":"${mergeCommit}"},"url":"https://example.test/pull/2"}]'\n`);
+  await chmod(gh, 0o700);
+
+  const output = await runOrchard(repository, home, ["recycle", "release-branch", "--json"], {
     PATH: `${bin}:${process.env.PATH}`,
   });
 
