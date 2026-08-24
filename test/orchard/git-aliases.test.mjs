@@ -11,7 +11,7 @@ const REPOSITORY = path.join(TEST_DIRECTORY, "../..");
 const GIT_CONFIGURATION = path.join(REPOSITORY, "config");
 
 function git(cwd, args, home) {
-  const output = spawnSync("git", args, {
+  const output = spawnSync("git", ["-c", "core.fsmonitor=false", ...args], {
     cwd,
     env: { ...process.env, HOME: home },
     encoding: "utf8",

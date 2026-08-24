@@ -5,19 +5,24 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const GIT_TIMEOUT_MS = 30_000;
+const DISABLE_FILE_SYSTEM_MONITOR_ARGS = ["-c", "core.fsmonitor=false"];
 
 export async function runGit(cwd, args, options = {}) {
-  const { stdout, stderr } = await execFileAsync("git", ["-C", cwd, ...args], {
-    encoding: "utf8",
-    timeout: options.timeout ?? GIT_TIMEOUT_MS,
-    maxBuffer: 10 * 1024 * 1024,
-    env: options.env ?? process.env,
-  });
+  const { stdout, stderr } = await execFileAsync(
+    "git",
+    [...DISABLE_FILE_SYSTEM_MONITOR_ARGS, "-C", cwd, ...args],
+    {
+      encoding: "utf8",
+      timeout: options.timeout ?? GIT_TIMEOUT_MS,
+      maxBuffer: 10 * 1024 * 1024,
+      env: options.env ?? process.env,
+    },
+  );
   return { stdout: stdout.trimEnd(), stderr: stderr.trimEnd() };
 }
 
 export async function runGitInteractive(cwd, args, options = {}) {
-  const child = spawn("git", args, {
+  const child = spawn("git", [...DISABLE_FILE_SYSTEM_MONITOR_ARGS, ...args], {
     cwd,
     env: options.env ?? process.env,
     stdio: "inherit",

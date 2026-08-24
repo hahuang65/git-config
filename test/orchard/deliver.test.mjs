@@ -13,7 +13,7 @@ const TEST_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const CLI_PATH = path.join(TEST_DIRECTORY, "../../orchard/bin/orchard.mjs");
 
 function git(cwd, args, environment = {}) {
-  const output = spawnSync("git", ["-C", cwd, ...args], {
+  const output = spawnSync("git", ["-c", "core.fsmonitor=false", "-C", cwd, ...args], {
     encoding: "utf8",
     env: { ...process.env, ...environment },
   });
@@ -388,7 +388,7 @@ test("pull-request delivery revalidates publication immediately before opening t
   git(updater, ["add", "raced.txt"]);
   git(updater, ["commit", "-m", "remote race"]);
   const raceScript = path.join(home, "push-race.mjs");
-  await writeFile(raceScript, `import { spawnSync } from "node:child_process";\nconst pushed = spawnSync("git", ["-C", process.env.ORCHARD_RACE_REPO, "push"], { stdio: "inherit" });\nprocess.exitCode = pushed.status;\n`);
+  await writeFile(raceScript, `import { spawnSync } from "node:child_process";\nconst pushed = spawnSync("git", ["-c", "core.fsmonitor=false", "-C", process.env.ORCHARD_RACE_REPO, "push"], { stdio: "inherit" });\nprocess.exitCode = pushed.status;\n`);
   const globalConfig = await configurePullRequestDelivery(home);
   git(home, ["config", "--file", globalConfig, "alias.sync", `!node ${raceScript}`]);
   const capture = await installPullRequestCapture(home);

@@ -1,10 +1,31 @@
 import assert from "node:assert/strict";
-import { mkdtemp, realpath, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { findMainProjectDirectory, runGit } from "../../orchard/runtime/git.mjs";
+import { findMainProjectDirectory, runGit, runGitInteractive } from "../../orchard/runtime/git.mjs";
+
+test("Git gateway disables the file-system monitor", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "orchard-git-"));
+  await runGit(directory, ["init"]);
+  await runGit(directory, ["config", "core.fsmonitor", "true"]);
+
+  const { stdout } = await runGit(directory, ["config", "--get", "core.fsmonitor"]);
+
+  assert.equal(stdout, "false");
+});
+
+test("interactive Git gateway disables the file-system monitor", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "orchard-git-interactive-"));
+  await runGit(directory, ["init"]);
+  await runGit(directory, ["config", "core.fsmonitor", "true"]);
+  await runGit(directory, ["config", "alias.record-fsmonitor", "!git config --get core.fsmonitor > fsmonitor-value"]);
+
+  await runGitInteractive(directory, ["record-fsmonitor"]);
+
+  assert.equal(await readFile(path.join(directory, "fsmonitor-value"), "utf8"), "false\n");
+});
 
 test("Git gateway bounds external command duration", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "orchard-git-"));

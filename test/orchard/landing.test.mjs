@@ -8,7 +8,7 @@ import test from "node:test";
 import { proveLanding } from "../../orchard/runtime/landing.mjs";
 
 function git(cwd, args) {
-  const output = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
+  const output = spawnSync("git", ["-c", "core.fsmonitor=false", "-C", cwd, ...args], { encoding: "utf8" });
   if (output.status !== 0) throw new Error(output.stderr);
   return output.stdout.trim();
 }
