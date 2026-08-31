@@ -1,13 +1,14 @@
 import path from "node:path";
 
+import { moveAvailableSlot, restoreAvailableSlot } from "./available-slot.mjs";
 import { attachTaskBranch, createBranchBoundWorktree } from "./branch.mjs";
 import { readOrchardCapacity } from "./capacity.mjs";
-import { findRemoteTrunk, findRepositoryRoot, runGit } from "./git.mjs";
+import { findRemoteTrunk, findRepositoryRoot } from "./git.mjs";
 import { normalizeIntent } from "./intent.mjs";
 import { withProjectLock } from "./lock.mjs";
 import { openProjectRegistry, saveProjectState } from "./registry.mjs";
 import { synchronizeTrunk } from "./synchronize.mjs";
-import { createTaskOutcome, createTaskSlot } from "./task.mjs";
+import { assignTaskSlot, createTaskOutcome, createTaskSlot } from "./task.mjs";
 import { assertCleanWorktree, readCurrentBranch } from "./workspace-checks.mjs";
 
 export async function acquireTask({ cwd, home, requestedIntent, offline = false }) {
@@ -48,9 +49,8 @@ async function acquireInRegistry({ registry, projectRoot, checkedOutBranch, inte
 }
 
 async function reuseAvailableSlot({ registry, slot, projectRoot, trunk, intent }) {
-  const availablePath = slot.path;
   const worktreePath = path.join(registry.directory, intent);
-  await runGit(projectRoot, ["worktree", "move", availablePath, worktreePath]);
+  const availablePath = await moveAvailableSlot({ projectRoot, slot, worktreePath });
   let branch;
   try {
     branch = await attachTaskBranch({ projectRoot, trunk, intent, worktreePath });
@@ -58,25 +58,7 @@ async function reuseAvailableSlot({ registry, slot, projectRoot, trunk, intent }
     await restoreAvailableSlot({ projectRoot, trunk, worktreePath, availablePath });
     throw error;
   }
-  Object.assign(slot, {
-    lifecycle: "task",
-    path: worktreePath,
-    intent,
-    branch,
-    baseBranch: trunk,
-    owners: [],
-    assignedAt: new Date().toISOString(),
-  });
-  delete slot.availableAt;
+  assignTaskSlot(slot, { worktreePath, intent, branch, baseBranch: trunk });
   await saveProjectState(registry);
   return createTaskOutcome(registry.state.project, slot);
-}
-
-async function restoreAvailableSlot({ projectRoot, trunk, worktreePath, availablePath }) {
-  try {
-    await runGit(worktreePath, ["switch", "--detach", trunk]);
-    await runGit(projectRoot, ["worktree", "move", worktreePath, availablePath]);
-  } catch {
-    // Git worktree metadata preserves the failed slot for conservative recovery.
-  }
 }

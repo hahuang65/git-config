@@ -13,6 +13,20 @@ export function createTaskSlot({ worktreePath, intent, branch, baseBranch }) {
   };
 }
 
+export function assignTaskSlot(slot, { worktreePath, intent, branch, baseBranch }) {
+  Object.assign(slot, {
+    lifecycle: "task",
+    path: worktreePath,
+    intent,
+    branch,
+    baseBranch,
+    owners: [],
+    assignedAt: new Date().toISOString(),
+  });
+  delete slot.availableAt;
+  return slot;
+}
+
 export function createTaskOutcome(project, slot) {
   return {
     project,

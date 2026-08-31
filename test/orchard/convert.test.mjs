@@ -35,10 +35,10 @@ async function createRemoteRepository(home) {
   return repository;
 }
 
-async function runOrchard(cwd, home, args) {
+async function runOrchard(cwd, home, args, extraEnvironment = {}) {
   const child = spawn("node", [CLI_PATH, ...args], {
     cwd,
-    env: { ...process.env, HOME: home, GIT_CONFIG_GLOBAL: "/dev/null" },
+    env: { ...process.env, HOME: home, GIT_CONFIG_GLOBAL: "/dev/null", ...extraEnvironment },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stdout = "";
@@ -67,6 +67,30 @@ test("convert moves a clean local task branch into a managed worktree", async ()
   assert.equal(git(converted.worktree.path, ["rev-parse", "HEAD"]), featureTip);
   assert.equal(git(converted.worktree.path, ["branch", "--show-current"]), "feature/auth");
   assert.equal(git(repository, ["branch", "--show-current"]), "main");
+});
+
+test("convert reuses an available pool slot when capacity is reserved", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "orchard-convert-"));
+  const repository = await createRemoteRepository(home);
+  const environment = { ORCHARD_MAX_TREES: "1" };
+  const created = await runOrchard(repository, home, ["new", "Reserved", "--offline", "--json"], environment);
+  assert.equal(created.exitCode, 0, created.stderr);
+  const recycled = await runOrchard(repository, home, ["recycle", "reserved", "--json"], environment);
+  assert.equal(recycled.exitCode, 0, recycled.stderr);
+  const reservedSlot = JSON.parse(recycled.stdout).slot;
+  git(repository, ["switch", "-c", "feature/reserved-convert"]);
+  await commitFile(repository, "reserved.txt", "converted\n", "converted feature");
+
+  const output = await runOrchard(repository, home, ["convert", "Use Reservation", "--json"], environment);
+
+  assert.equal(output.exitCode, 0, output.stderr);
+  const converted = JSON.parse(output.stdout).worktree;
+  assert.equal(converted.branch, "feature/reserved-convert");
+  assert.equal(git(converted.path, ["branch", "--show-current"]), "feature/reserved-convert");
+  const state = JSON.parse(await readFile(path.join(home, ".orchard", "alpha", "state.json"), "utf8"));
+  assert.equal(state.slots.length, 1);
+  assert.equal(state.slots[0].id, reservedSlot.id);
+  assert.equal(state.slots[0].lifecycle, "task");
 });
 
 test("conversion failure restores the local task branch and reports the recoverable target", async () => {

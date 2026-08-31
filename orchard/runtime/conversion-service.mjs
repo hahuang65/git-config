@@ -1,12 +1,13 @@
 import path from "node:path";
 
+import { moveAvailableSlot, restoreAvailableSlot } from "./available-slot.mjs";
 import { readOrchardCapacity } from "./capacity.mjs";
 import { applyConversionState, captureConversionState, dropConversionState } from "./conversion-state.mjs";
 import { findMainProjectDirectory, findRemoteTrunk, findRepositoryRoot, runGit } from "./git.mjs";
 import { normalizeIntent } from "./intent.mjs";
 import { withProjectLock } from "./lock.mjs";
 import { findProjectRegistry, openProjectRegistry, saveProjectState } from "./registry.mjs";
-import { createTaskOutcome, createTaskSlot } from "./task.mjs";
+import { assignTaskSlot, createTaskOutcome, createTaskSlot } from "./task.mjs";
 import { inferTaskBaseBranch } from "./task-base.mjs";
 import { readCurrentBranch } from "./workspace-checks.mjs";
 
@@ -28,7 +29,8 @@ export async function convertTaskBranch({ cwd, home, requestedIntent }) {
 
 async function convertUnderLock({ home, projectRoot, trunk, branch, intent, capacity }) {
   const registry = await openProjectRegistry({ home, projectRoot, trunk });
-  if (registry.state.slots.length >= capacity) {
+  const availableSlot = registry.state.slots.find((slot) => slot.lifecycle === "available");
+  if (!availableSlot && registry.state.slots.length >= capacity) {
     throw new Error(`Orchard capacity of ${capacity} reached for ${registry.state.project.name}`);
   }
   if (await readCurrentBranch(projectRoot) !== branch) throw new Error("The task branch changed during conversion");
@@ -37,18 +39,34 @@ async function convertUnderLock({ home, projectRoot, trunk, branch, intent, capa
   const worktreePath = path.join(registry.directory, intent);
   await runGit(projectRoot, ["switch", trunk]);
   try {
-    await runGit(projectRoot, ["worktree", "add", worktreePath, branch]);
+    await createConversionWorktree({ availableSlot, projectRoot, trunk, branch, worktreePath });
   } catch (error) {
     await recoverMainCheckout(projectRoot, branch, captured);
     throw new Error(`Conversion failed; branch '${branch}' remains recoverable and target path was '${worktreePath}': ${error.message}`);
   }
-  return finishConversion({ registry, projectRoot, worktreePath, intent, branch, baseBranch, captured });
+  return finishConversion({ registry, availableSlot, projectRoot, worktreePath, intent, branch, baseBranch, captured });
 }
 
-async function finishConversion({ registry, projectRoot, worktreePath, intent, branch, baseBranch, captured }) {
-  const slot = createTaskSlot({ worktreePath, intent, branch, baseBranch });
+async function createConversionWorktree({ availableSlot, projectRoot, trunk, branch, worktreePath }) {
+  if (!availableSlot) {
+    await runGit(projectRoot, ["worktree", "add", worktreePath, branch]);
+    return;
+  }
+  const availablePath = await moveAvailableSlot({ projectRoot, slot: availableSlot, worktreePath });
+  try {
+    await runGit(worktreePath, ["switch", branch]);
+  } catch (error) {
+    await restoreAvailableSlot({ projectRoot, trunk, worktreePath, availablePath });
+    throw error;
+  }
+}
+
+async function finishConversion({ registry, availableSlot, projectRoot, worktreePath, intent, branch, baseBranch, captured }) {
+  const slot = availableSlot
+    ? assignTaskSlot(availableSlot, { worktreePath, intent, branch, baseBranch })
+    : createTaskSlot({ worktreePath, intent, branch, baseBranch });
   if (captured) slot.recovery = createRecoveryRecord(captured);
-  registry.state.slots.push(slot);
+  if (!availableSlot) registry.state.slots.push(slot);
   await saveProjectState(registry);
   try {
     await applyConversionState(worktreePath, captured);
