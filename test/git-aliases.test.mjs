@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const TEST_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
-const REPOSITORY = path.join(TEST_DIRECTORY, "../..");
+const REPOSITORY = path.join(TEST_DIRECTORY, "..");
 const GIT_CONFIGURATION = path.join(REPOSITORY, "config");
 
 function git(cwd, args, home) {

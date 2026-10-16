@@ -152,7 +152,7 @@
   wip = !git add --all && git commit --no-verify --message "WIP"
 
 # Keep these includeIf sections LAST: later values win in Git config, so the
-# A5 overrides (core.excludesFile, ai.projectFamily, orchard.*) must be read
+# A5 overrides (core.excludesFile, ai.projectFamily) must be read
 # after this file's own [core] settings or they are silently overridden.
 [includeIf "hasconfig:remote.*.url:git@github.com:summit-partners/**"]
   path = ~/.a5.gitconfig
